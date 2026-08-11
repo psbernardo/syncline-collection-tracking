@@ -1,0 +1,37 @@
+{{ define "multi-select" }}
+<div id="{{ .ID }}" class="multi-select" x-cloak x-data="multiSelect()" x-init="initialize($refs.fallbackInputs)">
+  <span class="multi-select-label" id="{{ .ID }}-label">{{ .Label }}</span>
+  <div class="multi-select-control" aria-labelledby="{{ .ID }}-label">
+    <div class="multi-select-values">
+      <template x-for="value in selected" :key="value">
+        <span class="multi-select-chip">
+          <span x-text="labelFor(value)"></span>
+           <button type="button" class="multi-select-remove" @click="remove(value); $nextTick(() => notifyChange())" :aria-label="`Remove ${labelFor(value)}`">&times;</button>
+        </span>
+      </template>
+      <button type="button" class="multi-select-trigger" @click="open = !open" @keydown="triggerKeydown($event)" :aria-expanded="open.toString()" aria-haspopup="listbox" aria-controls="{{ .ID }}-options">
+        <span x-show="selected.length === 0">{{ .Placeholder }}</span>
+        <span class="multi-select-caret" aria-hidden="true">&#9662;</span>
+      </button>
+    </div>
+  </div>
+  <div id="{{ .ID }}-options" class="multi-select-options" x-show="open" x-transition @click.outside="close" role="listbox" aria-labelledby="{{ .ID }}-label">
+    {{ range .Options }}
+    <button type="button" class="multi-select-option" data-multi-select-option data-value="{{ .Value }}" data-label="{{ .Label }}" role="option" @click="toggle($event.currentTarget.dataset.value); $nextTick(() => notifyChange())" @keydown="optionKeydown($event)" :aria-selected="isSelected($el.dataset.value).toString()" :disabled="isSelected($el.dataset.value) || {{ .Disabled }}" :class="{ 'is-selected': isSelected($el.dataset.value) }">
+      <span>{{ .Label }}</span><span class="multi-select-check" aria-hidden="true">&#10003;</span>
+    </button>
+    {{ end }}
+    <p class="multi-select-empty" x-show="options.length === 0">No options available.</p>
+  </div>
+  <div x-ref="fallbackInputs">
+    {{ range .Selected }}<input type="hidden" data-multi-select-input name="{{ $.Name }}" value="{{ . }}">{{ end }}
+  </div>
+  <template x-for="value in selected" :key="`input-${value}`"><input type="hidden" name="{{ .Name }}" :value="value"></template>
+</div>
+<noscript>
+  <fieldset class="multi-select-fallback">
+    <legend>{{ .Label }}</legend>
+    {{ range $option := .Options }}<label><input type="checkbox" name="{{ $.Name }}" value="{{ $option.Value }}"{{ if $option.Disabled }} disabled{{ end }}{{ range $.Selected }}{{ if eq . $option.Value }} checked{{ end }}{{ end }}> {{ $option.Label }}</label>{{ end }}
+  </fieldset>
+</noscript>
+{{ end }}

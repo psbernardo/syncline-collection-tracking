@@ -1,0 +1,15 @@
+{{ define "client-summary" }}
+<section class="card client-summary" aria-labelledby="client-summary-heading">
+  <div class="card-heading"><h2 id="client-summary-heading">Receivables by client</h2><span class="badge">{{ len . }} clients</span></div>
+  {{ if . }}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Client</th><th>Total receivables</th><th>Pending</th><th>Near due</th><th>Overdue</th><th>Payment received</th><th>Details</th></tr></thead>
+      <tbody>{{ range . }}<tr><td><strong>{{ .CompanyName }}</strong></td><td>{{ .TotalCount }}</td><td>{{ .PendingCount }}</td><td>{{ .NearDueCount }}</td><td>{{ .OverdueCount }}</td><td>{{ .PaymentReceivedCount }}</td><td><a class="button client-details-link" href="/receivables?company={{ .CompanyName | urlquery }}">View details</a></td></tr>{{ end }}</tbody>
+    </table>
+  </div>
+  {{ else }}
+  <div class="empty-state">No active receivables by client yet.</div>
+  {{ end }}
+</section>
+{{ end }}

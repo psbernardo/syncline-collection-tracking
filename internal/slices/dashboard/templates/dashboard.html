@@ -1,0 +1,4 @@
+{{ define "content" }}
+<div class="page-heading"><div><p class="eyebrow">Overview</p><h1>Collection dashboard</h1><p class="muted">A daily view of what is due, overdue, pending, and paid.</p></div><button class="button" hx-get="/dashboard/summary" hx-target="#dashboard-data" hx-swap="innerHTML">Refresh totals</button></div>
+<section id="dashboard-data" aria-label="Collection dashboard data">{{ template "dashboard-data" .Totals }}</section>
+{{ end }}

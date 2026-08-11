@@ -1,0 +1,21 @@
+{{ define "summary-cards" }}
+<div class="summary-grid">
+  {{ template "summary-card" .Overdue }}
+  {{ template "summary-card" .NearDue }}
+  {{ template "summary-card" .Pending }}
+  {{ template "summary-card" .PaymentReceived }}
+</div>
+{{ end }}
+
+{{ define "dashboard-data" }}
+{{ template "summary-cards" . }}
+{{ template "client-summary" .Clients }}
+{{ end }}
+
+{{ define "summary-card" }}
+<article class="summary-card status-{{ .Tone }}">
+  <p class="eyebrow">{{ .Label }}</p>
+  <strong class="summary-count">{{ .ReceivableCount }} receivables</strong>
+  <div class="summary-meta"><span>{{ .ClientCount }} clients</span><span class="summary-amount">{{ .AmountDisplay }} PHP</span></div>
+</article>
+{{ end }}

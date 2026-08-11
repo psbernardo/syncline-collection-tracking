@@ -1,0 +1,6 @@
+{{ define "field" }}
+<div class="field"><label for="{{ .id }}">{{ .label }}</label><input id="{{ .id }}" name="{{ .id }}" value="{{ .value }}" required aria-describedby="{{ .id }}-error"><p id="{{ .id }}-error" class="error">{{ .error }}</p></div>
+{{ end }}
+{{ define "textarea" }}
+<div class="field field-wide"><label for="{{ .id }}">{{ .label }}</label><textarea id="{{ .id }}" name="{{ .id }}" required aria-describedby="{{ .id }}-error">{{ .value }}</textarea><p id="{{ .id }}-error" class="error">{{ .error }}</p></div>
+{{ end }}

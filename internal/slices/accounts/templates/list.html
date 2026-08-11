@@ -1,0 +1,36 @@
+{{ define "content" }}
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">Accounts</p>
+    <h1>Company accounts</h1>
+    <p class="muted">Clients connected to your collection receivables.</p>
+  </div>
+  <a class="button button-primary" href="/accounts/new">Add company</a>
+</div>
+
+<section class="card" aria-labelledby="account-list-heading">
+  <div class="card-heading">
+    <h2 id="account-list-heading">All companies</h2>
+    <span class="badge">{{ len .Accounts }} accounts</span>
+  </div>
+  {{ if .Accounts }}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Company</th><th>Contact</th><th>TIN</th><th>Contact number</th></tr></thead>
+      <tbody>
+      {{ range .Accounts }}
+        <tr>
+          <td><a href="/accounts/{{ .ID }}/edit"><strong>{{ .CompanyName }}</strong></a></td>
+          <td>{{ .ContactPerson }}</td>
+          <td>{{ .TINNumber }}</td>
+          <td>{{ .ContactNumber }}</td>
+        </tr>
+      {{ end }}
+      </tbody>
+    </table>
+  </div>
+  {{ else }}
+    <div class="empty-state">No company accounts yet. Add the first client to begin tracking receivables.</div>
+  {{ end }}
+</section>
+{{ end }}
