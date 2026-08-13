@@ -56,6 +56,7 @@ The next development work is the separate migration executable and the first SQL
 | P2 | Dashboard totals implementation | In Progress | Aggregation repository, summary cards, HTMX refresh, and tests implemented; live SQL verification pending |
 | P2 | Receivable filters plan | Completed | Defined in `analysis/receivable-filter-plan.md` |
 | P2 | Receivable filters implementation | Completed | Company, PO, multi-status filters, server-side query, normalized URL state, HTMX results, and cursor UI implemented; live SQL verification pending |
+| P2 | Receivable invoice-number filter plan | Completed | Invoice query parsing, server-side filtering, cursor binding, HTMX state, UI, and tests implemented |
 | P2 | Reusable multi-select dropdown plan | Completed | Defined in `analysis/multi-select-dropdown-plan.md` |
 | P2 | Reusable multi-select dropdown implementation | Completed | Shared server-rendered component, Alpine add/remove behavior, native fallback, receivables status integration, and template coverage implemented |
 | P2 | Receivable list company-name and edit plan | Completed | Defined in `analysis/receivable-list-edit-plan.md` |
@@ -65,6 +66,7 @@ The next development work is the separate migration executable and the first SQL
 | P1 | Duplicate PO data cleanup | Completed | Existing PO `001` conflict resolved before migration `0003` |
 | P2 | Duplicate PO handling implementation | In Progress | Application checks and migration are complete; user feedback snackbar remains to be implemented |
 | P2 | Receivable list company-name and edit implementation | In Progress | Company-name projections and edit flow implemented; live SQL/browser verification pending |
+| P2 | Receivable new-column plan | In Progress | Invoice number implementation added; migration `0004` backfills existing rows with default `0000`; SQL verification pending |
 | P3 | Authentication middleware | Deferred | Add during the middle of development before wider use |
 | P3 | Manual SQL Server integration verification | Completed | `go run ./cmd/migrate` connected to `CTS_DEV`; rollback remains intentionally unrun on shared data |
 | P3 | Production deployment hardening | Deferred | Local-only MVP; backups and graceful shutdown remain out of scope |

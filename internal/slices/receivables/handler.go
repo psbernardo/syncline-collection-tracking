@@ -32,6 +32,7 @@ type listPage struct {
 	NextCursor     string
 	RemainingCount int64
 	Filters        ListQuery
+	CompanyFilter  webtemplates.MultiSelectViewModel
 	StatusFilter   webtemplates.MultiSelectViewModel
 }
 
@@ -103,12 +104,17 @@ func (handler *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 	query := parseListQuery(r)
+	accounts, err := handler.service.Accounts(r.Context())
+	if err != nil {
+		handler.serverError(w, err)
+		return
+	}
 	result, err := handler.service.ListFiltered(r.Context(), query)
 	if err != nil {
 		handler.serverError(w, err)
 		return
 	}
-	page := listPage{Title: "Receivables", ActiveNav: "receivables", Receivables: result.Items, NextCursor: result.NextCursor, RemainingCount: result.RemainingCount, Filters: query, StatusFilter: statusFilter(query.Statuses)}
+	page := listPage{Title: "Receivables", ActiveNav: "receivables", Receivables: result.Items, NextCursor: result.NextCursor, RemainingCount: result.RemainingCount, Filters: query, CompanyFilter: companyFilter(accounts, query.CompanyAccountIDs), StatusFilter: statusFilter(query.Statuses)}
 	if isHTMX(r) {
 		handler.render(w, handler.listTemplate, "receivable-results", page)
 		return
@@ -117,9 +123,28 @@ func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func parseListQuery(r *http.Request) ListQuery {
+	companyValues := r.URL.Query()["company"]
+	companyIDs := make([]int64, 0, len(companyValues))
+	for _, value := range companyValues {
+		companyID, err := strconv.ParseInt(value, 10, 64)
+		if err == nil {
+			companyIDs = append(companyIDs, companyID)
+		}
+	}
 	statusValues := r.URL.Query()["status"]
-	query := ListQuery{Company: r.URL.Query().Get("company"), PO: r.URL.Query().Get("po"), Statuses: statusValues, StatusFilterProvided: len(statusValues) > 0, Cursor: r.URL.Query().Get("cursor"), PageSize: parsePageSize(r.URL.Query().Get("page_size")), Now: time.Now().UTC()}
+	query := ListQuery{CompanyAccountIDs: companyIDs, CompanyFilterProvided: len(companyValues) > 0, Invoice: r.URL.Query().Get("invoice"), PO: r.URL.Query().Get("po"), Statuses: statusValues, StatusFilterProvided: len(statusValues) > 0, Cursor: r.URL.Query().Get("cursor"), PageSize: parsePageSize(r.URL.Query().Get("page_size")), Now: time.Now().UTC()}
 	return normalizeListQuery(query)
+}
+
+func companyFilter(accounts []AccountOption, selected []int64) webtemplates.MultiSelectViewModel {
+	viewModel := webtemplates.MultiSelectViewModel{ID: "receivable-company-filter", Name: "company", Label: "Company", Placeholder: "Select companies", Options: make([]webtemplates.MultiSelectOption, 0, len(accounts))}
+	for _, account := range accounts {
+		viewModel.Options = append(viewModel.Options, webtemplates.MultiSelectOption{Value: strconv.FormatInt(account.ID, 10), Label: account.CompanyName})
+	}
+	for _, companyID := range selected {
+		viewModel.Selected = append(viewModel.Selected, strconv.FormatInt(companyID, 10))
+	}
+	return viewModel
 }
 
 func defaultStatusOptions() []statusOption {
@@ -165,19 +190,21 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 	companyID, _ := strconv.ParseInt(r.FormValue("company_account_id"), 10, 64)
 	term, _ := strconv.Atoi(r.FormValue("payment_term_days"))
 	command := CreateReceivableCommand{
-		CompanyAccountID: companyID, PONumber: r.FormValue("po_number"), AmountInput: r.FormValue("amount"),
+		CompanyAccountID: companyID, InvoiceNumber: r.FormValue("invoice_number"), PONumber: r.FormValue("po_number"), AmountInput: r.FormValue("amount"),
 		DeliveryDate: r.FormValue("delivery_date"), PaymentTermDays: term, RequestID: requestID(r),
 		IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin",
 	}
 	if _, err := handler.service.Create(r.Context(), command); err != nil {
 		var validation ValidationErrors
-		if errors.As(err, &validation) || errors.Is(err, ErrCompanyNotFound) || errors.Is(err, ErrDuplicatePO) {
+		if errors.As(err, &validation) || errors.Is(err, ErrCompanyNotFound) || errors.Is(err, ErrDuplicatePO) || errors.Is(err, ErrDuplicateInvoiceNumber) {
 			if validation == nil {
 				validation = ValidationErrors{}
 				if errors.Is(err, ErrCompanyNotFound) {
 					validation["CompanyAccountID"] = "Select an existing company account."
-				} else {
+				} else if errors.Is(err, ErrDuplicatePO) {
 					validation["PONumber"] = "PO number is already used by a non-cancelled receivable."
+				} else {
+					validation["InvoiceNumber"] = "Invoice number is already used by a non-cancelled receivable."
 				}
 			}
 			accounts, listErr := handler.service.Accounts(r.Context())
@@ -189,6 +216,8 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 			if isHTMX(r) {
 				if errors.Is(err, ErrDuplicatePO) {
 					w.Header().Set("X-Feedback-Message", "PO number is already used by a non-cancelled receivable.")
+				} else if errors.Is(err, ErrDuplicateInvoiceNumber) {
+					w.Header().Set("X-Feedback-Message", "Invoice number is already used by a non-cancelled receivable.")
 				} else {
 					w.Header().Set("X-Feedback-Message", "Please correct the highlighted receivable fields.")
 				}
@@ -242,7 +271,7 @@ func (handler *Handler) editForm(w http.ResponseWriter, r *http.Request) {
 	form := ReceivableFormViewModel{
 		Mode: "edit", Action: "/receivables/" + strconv.FormatInt(id, 10), SubmitLabel: "Save changes", PageTitle: "Edit delivery receivable",
 		ReceivableID: id, RowVersion: base64.RawURLEncoding.EncodeToString(receivable.RowVersion), Accounts: accounts,
-		Values:         CreateReceivableCommand{CompanyAccountID: receivable.CompanyAccountID, PONumber: receivable.PONumber, AmountInput: receivable.AmountDue.Format(), DeliveryDate: businessdate.FormatUTC(receivable.DeliveryDateUTC), PaymentTermDays: receivable.PaymentTermDays},
+		Values:         CreateReceivableCommand{CompanyAccountID: receivable.CompanyAccountID, InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber, AmountInput: receivable.AmountDue.Format(), DeliveryDate: businessdate.FormatUTC(receivable.DeliveryDateUTC), PaymentTermDays: receivable.PaymentTermDays},
 		IdempotencyKey: key,
 	}
 	handler.render(w, handler.formTemplate, "layout", formPage{Title: form.PageTitle, ActiveNav: "receivables", Form: form})
@@ -265,16 +294,18 @@ func (handler *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	companyID, _ := strconv.ParseInt(r.FormValue("company_account_id"), 10, 64)
 	term, _ := strconv.Atoi(r.FormValue("payment_term_days"))
-	command := UpdateReceivableCommand{ID: id, CompanyAccountID: companyID, PONumber: r.FormValue("po_number"), AmountInput: r.FormValue("amount"), DeliveryDate: r.FormValue("delivery_date"), PaymentTermDays: term, OriginalVersion: version, RequestID: requestID(r), IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin"}
+	command := UpdateReceivableCommand{ID: id, CompanyAccountID: companyID, InvoiceNumber: r.FormValue("invoice_number"), PONumber: r.FormValue("po_number"), AmountInput: r.FormValue("amount"), DeliveryDate: r.FormValue("delivery_date"), PaymentTermDays: term, OriginalVersion: version, RequestID: requestID(r), IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin"}
 	if _, err := handler.service.Update(r.Context(), command); err != nil {
 		var validation ValidationErrors
-		if errors.As(err, &validation) || errors.Is(err, ErrCompanyNotFound) || errors.Is(err, ErrDuplicatePO) {
+		if errors.As(err, &validation) || errors.Is(err, ErrCompanyNotFound) || errors.Is(err, ErrDuplicatePO) || errors.Is(err, ErrDuplicateInvoiceNumber) {
 			if validation == nil {
 				validation = ValidationErrors{}
 				if errors.Is(err, ErrCompanyNotFound) {
 					validation["CompanyAccountID"] = "Select an existing company account."
-				} else {
+				} else if errors.Is(err, ErrDuplicatePO) {
 					validation["PONumber"] = "PO number is already used by a non-cancelled receivable."
+				} else {
+					validation["InvoiceNumber"] = "Invoice number is already used by a non-cancelled receivable."
 				}
 			}
 			handler.renderUpdateValidation(w, r, command, validation, version)
@@ -306,7 +337,7 @@ func (handler *Handler) renderUpdateValidation(w http.ResponseWriter, r *http.Re
 		handler.serverError(w, err)
 		return
 	}
-	form := ReceivableFormViewModel{Mode: "edit", Action: "/receivables/" + strconv.FormatInt(command.ID, 10), SubmitLabel: "Save changes", PageTitle: "Edit delivery receivable", ReceivableID: command.ID, RowVersion: base64.RawURLEncoding.EncodeToString(version), Values: CreateReceivableCommand{CompanyAccountID: command.CompanyAccountID, PONumber: command.PONumber, AmountInput: command.AmountInput, DeliveryDate: command.DeliveryDate, PaymentTermDays: command.PaymentTermDays}, Errors: validation, Accounts: accounts, IdempotencyKey: command.IdempotencyKey}
+	form := ReceivableFormViewModel{Mode: "edit", Action: "/receivables/" + strconv.FormatInt(command.ID, 10), SubmitLabel: "Save changes", PageTitle: "Edit delivery receivable", ReceivableID: command.ID, RowVersion: base64.RawURLEncoding.EncodeToString(version), Values: CreateReceivableCommand{CompanyAccountID: command.CompanyAccountID, InvoiceNumber: command.InvoiceNumber, PONumber: command.PONumber, AmountInput: command.AmountInput, DeliveryDate: command.DeliveryDate, PaymentTermDays: command.PaymentTermDays}, Errors: validation, Accounts: accounts, IdempotencyKey: command.IdempotencyKey}
 	if isHTMX(r) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		handler.render(w, handler.formTemplate, "receivable-form", form)

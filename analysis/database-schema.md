@@ -43,6 +43,7 @@ Company-account archiving is out of scope for the current 1-4 client MVP, so no 
 |---|---|---:|---|
 | `delivery_receivable_id` | `BIGINT` | No | Identity primary key |
 | `company_account_id` | `BIGINT` | No | Foreign key to `company_accounts` |
+| `invoice_number` | `VARCHAR(100)` | No | Required, trimmed ASCII alphanumeric value; legacy rows default to `0000` during migration `0004` |
 | `po_number` | `VARCHAR(100)` | No | ASCII alphanumeric, application and database validation |
 | `po_number_normalized` | `VARCHAR(100)` | No | Uppercase comparison value |
 | `delivery_date_utc` | `DATETIME2(0)` | No | UTC-normalized Philippines date |
@@ -61,6 +62,7 @@ Recommended constraints:
 - `CK_delivery_receivables_amount_due_scaled` enforces `amount_due_scaled >= 0`.
 - `CK_delivery_receivables_lifecycle_status` restricts the lifecycle status values.
 - `CK_delivery_receivables_payment_date` prevents a payment date earlier than the delivery date when both values are present.
+- `CK_delivery_receivables_invoice_number` prevents an empty invoice number.
 - `CK_delivery_receivables_po_number_normalized` prevents an empty normalized PO value.
 - `FK_delivery_receivables_company_accounts` enforces the company relationship.
 
@@ -143,6 +145,7 @@ The migration test should verify schema metadata rather than relying only on suc
 
 - Required tables exist in `dbo`.
 - Required columns have the expected SQL types and nullability.
+- `invoice_number` is required and existing receivables are backfilled to `0000` by migration `0004`.
 - Foreign keys and check constraints exist.
 - Required indexes exist with the intended keys and filters.
 - `rowversion` is present on editable records.

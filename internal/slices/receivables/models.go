@@ -10,6 +10,7 @@ type receivableModel struct {
 	ID                 int64      `gorm:"column:delivery_receivable_id;primaryKey"`
 	CompanyAccountID   int64      `gorm:"column:company_account_id"`
 	CompanyName        string     `gorm:"column:company_name;->"`
+	InvoiceNumber      string     `gorm:"column:invoice_number"`
 	PONumber           string     `gorm:"column:po_number"`
 	PONumberNormalized string     `gorm:"column:po_number_normalized"`
 	DeliveryDateUTC    time.Time  `gorm:"column:delivery_date_utc"`
@@ -27,7 +28,7 @@ func (receivableModel) TableName() string { return "dbo.delivery_receivables" }
 
 func (model receivableModel) toDomain() DeliveryReceivable {
 	return DeliveryReceivable{
-		ID: model.ID, CompanyAccountID: model.CompanyAccountID, PONumber: model.PONumber,
+		ID: model.ID, CompanyAccountID: model.CompanyAccountID, InvoiceNumber: model.InvoiceNumber, PONumber: model.PONumber,
 		CompanyName:        model.CompanyName,
 		PONumberNormalized: model.PONumberNormalized,
 		DeliveryDateUTC:    model.DeliveryDateUTC, PaymentTermDays: model.PaymentTermDays,
@@ -39,7 +40,7 @@ func (model receivableModel) toDomain() DeliveryReceivable {
 
 func toModel(receivable DeliveryReceivable) receivableModel {
 	return receivableModel{
-		ID: receivable.ID, CompanyAccountID: receivable.CompanyAccountID, PONumber: receivable.PONumber,
+		ID: receivable.ID, CompanyAccountID: receivable.CompanyAccountID, InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber,
 		PONumberNormalized: receivable.PONumberNormalized,
 		DeliveryDateUTC:    receivable.DeliveryDateUTC, PaymentTermDays: receivable.PaymentTermDays,
 		DueDateUTC: receivable.DueDateUTC, AmountDueScaled: receivable.AmountDue.Int64(),

@@ -3,6 +3,7 @@
   <input type="hidden" name="idempotency_key" value="{{ .IdempotencyKey }}">
   {{ if eq .Mode "edit" }}<input type="hidden" name="row_version" value="{{ .RowVersion }}">{{ end }}
   <div class="field field-wide"><label for="company_account_id">Company</label><select id="company_account_id" name="company_account_id" required><option value="">Select company</option>{{ range .Accounts }}<option value="{{ .ID }}"{{ if eq .ID $.Values.CompanyAccountID }} selected{{ end }}>{{ .CompanyName }}</option>{{ end }}</select><p class="error">{{ .Errors.CompanyAccountID }}</p></div>
+  <div class="field"><label for="invoice_number">Invoice number</label><input id="invoice_number" name="invoice_number" value="{{ .Values.InvoiceNumber }}" required><p class="error">{{ .Errors.InvoiceNumber }}</p></div>
   <div class="field"><label for="po_number">PO number</label><input id="po_number" name="po_number" value="{{ .Values.PONumber }}" required><p class="error">{{ .Errors.PONumber }}</p></div>
   <div class="field"><label for="amount">Amount (PHP)</label><input id="amount" name="amount" value="{{ .Values.AmountInput }}" inputmode="decimal" required><p class="error">{{ .Errors.Amount }}</p></div>
   <div class="field"><label for="delivery_date">Delivery date</label><input id="delivery_date" name="delivery_date" value="{{ .Values.DeliveryDate }}" type="date" required><p class="error">{{ .Errors.DeliveryDate }}</p></div>

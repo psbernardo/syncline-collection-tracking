@@ -74,4 +74,18 @@ func (a Amount) Format() string {
 	return fmt.Sprintf("%d.%02d", whole, cents)
 }
 
+// FormatPHP returns a read-only PHP display value with thousands separators.
+func (a Amount) FormatPHP() string {
+	formatted := a.Format()
+	decimal := strings.LastIndexByte(formatted, '.')
+	whole, fraction := formatted, ""
+	if decimal >= 0 {
+		whole, fraction = formatted[:decimal], formatted[decimal:]
+	}
+	for index := len(whole) - 3; index > 0; index -= 3 {
+		whole = whole[:index] + "," + whole[index:]
+	}
+	return "₱" + whole + fraction
+}
+
 func (a Amount) Int64() int64 { return int64(a) }

@@ -1,7 +1,8 @@
 {{ define "content" }}
-<div class="page-heading"><div><p class="eyebrow">Collections</p><h1>Delivery receivables</h1><p class="muted">Money owed from delivered items.</p></div><a class="button button-primary" href="/receivables/new">Add receivable</a></div>
-<form id="receivable-filters" class="card filter-bar" method="get" action="/receivables" hx-get="/receivables" hx-target="#receivable-results" hx-trigger="change, submit, keyup changed delay:300ms from:input[name='company'], keyup changed delay:300ms from:input[name='po']" hx-push-url="true" hx-indicator="#receivable-search-indicator">
-  <input name="company" value="{{ .Filters.Company }}" placeholder="Company name">
+<div class="page-heading"><div><p class="eyebrow">Collections</p><h1>DELIVERY RECEIVABLES</h1><p class="muted">Money owed from delivered items.</p></div><a class="button button-primary" href="/receivables/new">Add receivable</a></div>
+<form id="receivable-filters" class="card filter-bar" method="get" action="/receivables" hx-get="/receivables" hx-target="#receivable-results" hx-trigger="change, submit, keyup changed delay:300ms from:input[name='company'], keyup changed delay:300ms from:input[name='invoice'], keyup changed delay:300ms from:input[name='po']" hx-push-url="true" hx-indicator="#receivable-search-indicator">
+  {{ template "multi-select" .CompanyFilter }}
+  <input name="invoice" value="{{ .Filters.Invoice }}" placeholder="Invoice number">
   <input name="po" value="{{ .Filters.PO }}" placeholder="PO number">
   {{ template "multi-select" .StatusFilter }}
   <button class="button button-primary" type="submit" hx-get="/receivables" hx-include="#receivable-filters" hx-target="#receivable-results" hx-push-url="true" hx-indicator="#receivable-search-indicator">Search</button>

@@ -22,6 +22,7 @@ type AccountRepository interface {
 
 type CreateReceivableCommand struct {
 	CompanyAccountID int64
+	InvoiceNumber    string
 	PONumber         string
 	AmountInput      string
 	DeliveryDate     string
@@ -34,6 +35,7 @@ type CreateReceivableCommand struct {
 type UpdateReceivableCommand struct {
 	ID               int64
 	CompanyAccountID int64
+	InvoiceNumber    string
 	PONumber         string
 	AmountInput      string
 	DeliveryDate     string
@@ -56,7 +58,7 @@ func NewService(db *gorm.DB, repo Repository, accountRepo AccountRepository) *se
 }
 
 func (service *service) Create(ctx context.Context, command CreateReceivableCommand) (DeliveryReceivable, error) {
-	receivable, err := NewDeliveryReceivable(command.CompanyAccountID, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays)
+	receivable, err := NewDeliveryReceivable(command.CompanyAccountID, command.InvoiceNumber, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays)
 	if err != nil {
 		return DeliveryReceivable{}, err
 	}
@@ -88,6 +90,13 @@ func (service *service) Create(ctx context.Context, command CreateReceivableComm
 		if !exists {
 			return ErrCompanyNotFound
 		}
+		duplicateInvoice, err := service.repo.FindBlockingInvoiceNumber(ctx, tx, receivable.InvoiceNumber, 0)
+		if err != nil {
+			return err
+		}
+		if duplicateInvoice {
+			return ErrDuplicateInvoiceNumber
+		}
 		duplicate, err := service.repo.FindBlockingPONumber(ctx, tx, receivable.PONumberNormalized, 0)
 		if err != nil {
 			return err
@@ -116,13 +125,16 @@ func (service *service) Create(ctx context.Context, command CreateReceivableComm
 		if isDuplicatePOError(err) {
 			return DeliveryReceivable{}, ErrDuplicatePO
 		}
+		if isDuplicateInvoiceError(err) {
+			return DeliveryReceivable{}, ErrDuplicateInvoiceNumber
+		}
 		return DeliveryReceivable{}, err
 	}
 	return result, nil
 }
 
 func (service *service) Update(ctx context.Context, command UpdateReceivableCommand) (DeliveryReceivable, error) {
-	receivable, err := NewDeliveryReceivable(command.CompanyAccountID, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays)
+	receivable, err := NewDeliveryReceivable(command.CompanyAccountID, command.InvoiceNumber, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays)
 	if err != nil {
 		return DeliveryReceivable{}, err
 	}
@@ -163,6 +175,13 @@ func (service *service) Update(ctx context.Context, command UpdateReceivableComm
 		if previous.LifecycleStatus != "Active" || previous.PaymentDateUTC != nil {
 			return ErrProtected
 		}
+		duplicateInvoice, err := service.repo.FindBlockingInvoiceNumber(ctx, tx, receivable.InvoiceNumber, command.ID)
+		if err != nil {
+			return err
+		}
+		if duplicateInvoice {
+			return ErrDuplicateInvoiceNumber
+		}
 		duplicate, err := service.repo.FindBlockingPONumber(ctx, tx, receivable.PONumberNormalized, command.ID)
 		if err != nil {
 			return err
@@ -191,6 +210,9 @@ func (service *service) Update(ctx context.Context, command UpdateReceivableComm
 	if err != nil {
 		if isDuplicatePOError(err) {
 			return DeliveryReceivable{}, ErrDuplicatePO
+		}
+		if isDuplicateInvoiceError(err) {
+			return DeliveryReceivable{}, ErrDuplicateInvoiceNumber
 		}
 		return DeliveryReceivable{}, err
 	}
@@ -256,6 +278,10 @@ func hashPayload(receivable DeliveryReceivable) string {
 
 func isDuplicatePOError(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "ux_delivery_receivables_po_not_cancelled")
+}
+
+func isDuplicateInvoiceError(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "ux_delivery_receivables_invoice_not_cancelled")
 }
 
 func NewIdempotencyKey() (string, error) {

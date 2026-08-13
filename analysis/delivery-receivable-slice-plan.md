@@ -23,6 +23,7 @@ The slice must follow `analysis/vertical-slice-coding-standard.md` and use:
 - List delivery receivables.
 - Display the create-receivable form.
 - Select an existing company account.
+- Enter invoice number.
 - Enter PO number, amount, delivery date, and payment term.
 - Validate payment terms from 1 through 120 calendar days.
 - Calculate the due date with the delivery date counted as day one.
@@ -97,6 +98,7 @@ Create `DeliveryReceivable` with:
 
 - ID
 - Company account ID
+- Invoice number
 - PO number
 - Delivery date
 - Payment term in days
@@ -219,6 +221,7 @@ Handler rules:
 The create form must include:
 
 - Company select.
+- Invoice number input.
 - PO number input.
 - PHP amount input.
 - Delivery date input.
@@ -363,7 +366,7 @@ HTTP tests with `httptest`:
 8. Given an audit failure, then the receivable and idempotency record are rolled back.
 9. Given the same idempotency key and payload twice, then exactly one receivable exists.
 10. Given JavaScript is disabled, then the form still submits and validates.
-11. Given the receivable list, then the amount, PO, delivery date, due date, and classification are visible.
+11. Given the receivable list, then the invoice number, amount, PO, delivery date, due date, and classification are visible.
 
 ## 7. Definition Of Done
 

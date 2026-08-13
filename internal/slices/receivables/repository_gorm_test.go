@@ -32,6 +32,38 @@ func TestApplyFiltersInvalidOnlyStatusReturnsNoRows(t *testing.T) {
 	}
 }
 
+func TestApplyFiltersAddsCompanyAccountPredicate(t *testing.T) {
+	db := dryRunSQLServer(t)
+	query := db.Table("dbo.delivery_receivables AS r")
+	statement := applyFilters(query, ListQuery{CompanyAccountIDs: []int64{2, 5}}, time.Time{}, time.Time{}).Find(&[]receivableModel{}).Statement
+	if !strings.Contains(statement.SQL.String(), "r.company_account_id IN") {
+		t.Fatalf("company filter SQL = %s, want company predicate", statement.SQL.String())
+	}
+	if len(statement.Vars) != 3 || statement.Vars[0] != int64(2) || statement.Vars[1] != int64(5) || statement.Vars[2] != "Active" {
+		t.Fatalf("company filter vars = %#v, want [2 5 Active]", statement.Vars)
+	}
+}
+
+func TestApplyFiltersEmptyProvidedCompanyFilterReturnsNoRows(t *testing.T) {
+	db := dryRunSQLServer(t)
+	statement := applyFilters(db.Table("dbo.delivery_receivables AS r"), ListQuery{CompanyFilterProvided: true}, time.Time{}, time.Time{}).Find(&[]receivableModel{}).Statement
+	if !strings.Contains(statement.SQL.String(), "1 = 0") {
+		t.Fatalf("empty company filter SQL = %s, want no-row predicate", statement.SQL.String())
+	}
+}
+
+func TestApplyFiltersAddsInvoicePredicate(t *testing.T) {
+	db := dryRunSQLServer(t)
+	query := db.Table("dbo.delivery_receivables AS r")
+	statement := applyFilters(query, ListQuery{Invoice: "0220"}, time.Time{}, time.Time{}).Find(&[]receivableModel{}).Statement
+	if !strings.Contains(statement.SQL.String(), "r.invoice_number LIKE @") {
+		t.Fatalf("invoice filter SQL = %s, want invoice predicate", statement.SQL.String())
+	}
+	if len(statement.Vars) < 2 || statement.Vars[0] != "%0220%" {
+		t.Fatalf("invoice filter vars = %#v, want invoice pattern", statement.Vars)
+	}
+}
+
 func dryRunSQLServer(t *testing.T) *gorm.DB {
 	t.Helper()
 	sqlDB, _, err := sqlmock.New()

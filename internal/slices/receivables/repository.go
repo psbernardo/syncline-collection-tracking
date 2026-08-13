@@ -13,4 +13,5 @@ type Repository interface {
 	ListFiltered(ctx context.Context, query ListQuery) ([]DeliveryReceivable, int64, error)
 	Update(ctx context.Context, db *gorm.DB, receivable DeliveryReceivable, originalVersion []byte) (DeliveryReceivable, error)
 	FindBlockingPONumber(ctx context.Context, db *gorm.DB, normalizedPO string, excludeID int64) (bool, error)
+	FindBlockingInvoiceNumber(ctx context.Context, db *gorm.DB, invoiceNumber string, excludeID int64) (bool, error)
 }

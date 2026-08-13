@@ -32,7 +32,8 @@ func run() error {
 	}
 	defer closeDB()
 
-	accountHandler, err := accounts.NewHandler(accounts.NewService(db, accounts.NewGormRepository(db)))
+	dashboardRepository := dashboard.NewGormRepository(db)
+	accountHandler, err := accounts.NewHandler(accounts.NewService(db, accounts.NewGormRepository(db)), dashboard.NewCompanyTotalsService(dashboardRepository))
 	if err != nil {
 		return err
 	}
@@ -44,7 +45,7 @@ func run() error {
 		return err
 	}
 	receivableHandler.RegisterRoutes(mux)
-	dashboardHandler, err := dashboard.NewHandler(dashboard.NewService(dashboard.NewGormRepository(db)))
+	dashboardHandler, err := dashboard.NewHandler(dashboard.NewService(dashboardRepository))
 	if err != nil {
 		return err
 	}

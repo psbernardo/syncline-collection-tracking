@@ -1,6 +1,6 @@
 {{ define "navigation" }}
 <aside class="sidebar" :class="{ 'is-open': navOpen }" aria-label="Primary navigation">
-  <a class="brand" href="/dashboard" @click="navOpen = false"><span class="brand-mark">SL</span><span>Syncline</span></a>
+  <a class="brand" href="/dashboard" @click="navOpen = false"><span class="brand-mark">SL</span><span class="brand-name">Syncline Consumer Goods Trading</span></a>
   <nav class="sidebar-nav">
     <p class="nav-section-label">Workspace</p>
     <a href="/dashboard" @click="navOpen = false"{{ if eq .ActiveNav "dashboard" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">D</span>Dashboard</a>

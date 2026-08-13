@@ -1,0 +1,21 @@
+{{ define "company-receivables" }}
+<section class="company-receivables" aria-label="Company receivables summary">
+  <div class="company-receivables-heading">
+    <div><p class="eyebrow">Receivables</p><h2>Collection summary</h2><p class="company-receivables-note">Total outstanding: {{ .OutstandingAmountDisplay }}</p></div>
+  </div>
+  <div class="summary-grid company-summary-grid">
+    {{ template "company-summary-card" .Overdue }}
+    {{ template "company-summary-card" .NearDue }}
+    {{ template "company-summary-card" .Pending }}
+    {{ template "company-summary-card" .PaymentReceived }}
+  </div>
+</section>
+{{ end }}
+
+{{ define "company-summary-card" }}
+<article class="summary-card status-{{ .Tone }}">
+  <p class="eyebrow">{{ .Label }}</p>
+  <strong class="summary-amount">{{ .AmountDisplay }}</strong>
+  <div class="summary-meta"><span>{{ .ReceivableCount }} receivables</span></div>
+</article>
+{{ end }}

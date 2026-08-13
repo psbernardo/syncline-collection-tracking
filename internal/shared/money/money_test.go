@@ -50,3 +50,18 @@ func TestFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatPHP(t *testing.T) {
+	for _, tt := range []struct {
+		amount Amount
+		want   string
+	}{
+		{amount: 0, want: "₱0.00"},
+		{amount: 98_003_439, want: "₱9,800.34"},
+		{amount: 12_345_000, want: "₱1,234.50"},
+	} {
+		if got := tt.amount.FormatPHP(); got != tt.want {
+			t.Fatalf("FormatPHP() = %q, want %q", got, tt.want)
+		}
+	}
+}

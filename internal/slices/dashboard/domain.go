@@ -21,6 +21,13 @@ type DashboardTotals struct {
 	Clients         []ClientReceivableSummary
 }
 
+type CompanyTotals struct {
+	Pending         ClassificationTotal
+	NearDue         ClassificationTotal
+	Overdue         ClassificationTotal
+	PaymentReceived ClassificationTotal
+}
+
 type ClientReceivableSummary struct {
 	CompanyAccountID     int64
 	CompanyName          string
@@ -40,21 +47,42 @@ func boundaries(now time.Time) (today, nearEnd time.Time) {
 }
 
 func (totals DashboardTotals) ViewModel() DashboardViewModel {
+	outstandingAmount := totals.Overdue.AmountScaled + totals.NearDue.AmountScaled + totals.Pending.AmountScaled
 	return DashboardViewModel{
-		Pending:         card("Pending", "pending", totals.Pending),
-		NearDue:         card("Near due", "near-due", totals.NearDue),
-		Overdue:         card("Overdue", "overdue", totals.Overdue),
-		PaymentReceived: card("Payment received", "payment-received", totals.PaymentReceived),
-		Clients:         totals.Clients,
+		OutstandingAmountDisplay: formatAmount(outstandingAmount),
+		Pending:                  card("Pending", "pending", totals.Pending),
+		NearDue:                  card("Near due", "near-due", totals.NearDue),
+		Overdue:                  card("Overdue", "overdue", totals.Overdue),
+		PaymentReceived:          card("Payment received", "payment-received", totals.PaymentReceived),
+		Clients:                  totals.Clients,
+	}
+}
+
+type CompanyTotalsViewModel struct {
+	OutstandingAmountDisplay string
+	Pending                  SummaryCard
+	NearDue                  SummaryCard
+	Overdue                  SummaryCard
+	PaymentReceived          SummaryCard
+}
+
+func (totals CompanyTotals) ViewModel() CompanyTotalsViewModel {
+	return CompanyTotalsViewModel{
+		OutstandingAmountDisplay: formatAmount(totals.Overdue.AmountScaled + totals.NearDue.AmountScaled + totals.Pending.AmountScaled),
+		Pending:                  card("Pending", "pending", totals.Pending),
+		NearDue:                  card("Near due", "near-due", totals.NearDue),
+		Overdue:                  card("Overdue", "overdue", totals.Overdue),
+		PaymentReceived:          card("Payment received", "payment-received", totals.PaymentReceived),
 	}
 }
 
 type DashboardViewModel struct {
-	Pending         SummaryCard
-	NearDue         SummaryCard
-	Overdue         SummaryCard
-	PaymentReceived SummaryCard
-	Clients         []ClientReceivableSummary
+	OutstandingAmountDisplay string
+	Pending                  SummaryCard
+	NearDue                  SummaryCard
+	Overdue                  SummaryCard
+	PaymentReceived          SummaryCard
+	Clients                  []ClientReceivableSummary
 }
 
 type SummaryCard struct {
@@ -66,5 +94,9 @@ type SummaryCard struct {
 }
 
 func card(label, tone string, total ClassificationTotal) SummaryCard {
-	return SummaryCard{Label: label, Tone: tone, AmountDisplay: money.Amount(total.AmountScaled).Format(), ReceivableCount: total.ReceivableCount, ClientCount: total.ClientCount}
+	return SummaryCard{Label: label, Tone: tone, AmountDisplay: formatAmount(total.AmountScaled), ReceivableCount: total.ReceivableCount, ClientCount: total.ClientCount}
+}
+
+func formatAmount(scaled int64) string {
+	return money.Amount(scaled).FormatPHP()
 }

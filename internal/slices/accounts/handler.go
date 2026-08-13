@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/psbernardo/syncline-collection-tracking/internal/slices/dashboard"
 	webtemplates "github.com/psbernardo/syncline-collection-tracking/internal/web/templates"
 )
 
@@ -18,9 +19,10 @@ import (
 var templateFiles embed.FS
 
 type Handler struct {
-	service      *commandService
-	listTemplate *template.Template
-	formTemplate *template.Template
+	service       *commandService
+	companyTotals *dashboard.CompanyTotalsService
+	listTemplate  *template.Template
+	formTemplate  *template.Template
 }
 
 type listPage struct {
@@ -29,7 +31,7 @@ type listPage struct {
 	Accounts  []AccountViewModel
 }
 
-func NewHandler(service *commandService) (*Handler, error) {
+func NewHandler(service *commandService, companyTotals ...*dashboard.CompanyTotalsService) (*Handler, error) {
 	functions := template.FuncMap{"dict": dict}
 	listTemplate, err := template.New("list").Funcs(functions).ParseFS(webtemplates.FS, "layout.html", "partials/*.html")
 	if err != nil {
@@ -47,7 +49,11 @@ func NewHandler(service *commandService) (*Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse account form page templates: %w", err)
 	}
-	return &Handler{service: service, listTemplate: listTemplate, formTemplate: formTemplate}, nil
+	var totalsService *dashboard.CompanyTotalsService
+	if len(companyTotals) > 0 {
+		totalsService = companyTotals[0]
+	}
+	return &Handler{service: service, companyTotals: totalsService, listTemplate: listTemplate, formTemplate: formTemplate}, nil
 }
 
 func (handler *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -101,7 +107,16 @@ func (handler *Handler) editForm(w http.ResponseWriter, r *http.Request) {
 		PageTitle: "Edit company account", AccountID: id, Values: account,
 		IdempotencyKey: key, RowVersion: base64.RawURLEncoding.EncodeToString(account.RowVersion),
 	}
-	handler.render(w, handler.formTemplate, "layout", formPage{Title: form.PageTitle, ActiveNav: "accounts", Form: form})
+	var totals *dashboard.CompanyTotalsViewModel
+	if handler.companyTotals != nil {
+		companyTotals, err := handler.companyTotals.Totals(r.Context(), id)
+		if err != nil {
+			handler.serverError(w, err)
+			return
+		}
+		totals = &companyTotals
+	}
+	handler.render(w, handler.formTemplate, "layout", formPage{Title: form.PageTitle, ActiveNav: "accounts", Form: form, CompanyTotals: totals})
 }
 
 func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -228,9 +243,10 @@ func (handler *Handler) renderUpdateValidation(w http.ResponseWriter, r *http.Re
 }
 
 type formPage struct {
-	Title     string
-	ActiveNav string
-	Form      AccountFormViewModel
+	Title         string
+	ActiveNav     string
+	Form          AccountFormViewModel
+	CompanyTotals *dashboard.CompanyTotalsViewModel
 }
 
 func (handler *Handler) render(w http.ResponseWriter, parsed *template.Template, name string, data any) {

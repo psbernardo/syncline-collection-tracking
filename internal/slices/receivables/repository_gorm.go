@@ -29,7 +29,7 @@ func (repository *GormRepository) FindByID(ctx context.Context, db *gorm.DB, id 
 	}
 	var model receivableModel
 	if err := db.WithContext(ctx).Table("dbo.delivery_receivables AS r").
-		Select("r.delivery_receivable_id, r.company_account_id, a.company_name, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version").
+		Select("r.delivery_receivable_id, r.company_account_id, a.company_name, r.invoice_number, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version").
 		Joins("INNER JOIN dbo.company_accounts AS a ON a.company_account_id = r.company_account_id").
 		Where("r.delivery_receivable_id = ?", id).First(&model).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -43,7 +43,7 @@ func (repository *GormRepository) FindByID(ctx context.Context, db *gorm.DB, id 
 func (repository *GormRepository) List(ctx context.Context) ([]DeliveryReceivable, error) {
 	var models []receivableModel
 	if err := repository.db.WithContext(ctx).Table("dbo.delivery_receivables AS r").
-		Select("r.delivery_receivable_id, r.company_account_id, a.company_name, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version").
+		Select("r.delivery_receivable_id, r.company_account_id, a.company_name, r.invoice_number, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version").
 		Joins("INNER JOIN dbo.company_accounts AS a ON a.company_account_id = r.company_account_id").
 		Order("r.due_date_utc, r.delivery_receivable_id").
 		Find(&models).Error; err != nil {
@@ -88,7 +88,7 @@ func (repository *GormRepository) ListFiltered(ctx context.Context, query ListQu
 		}
 	}
 	var models []receivableModel
-	if err := base.Select("r.delivery_receivable_id, r.company_account_id, a.company_name, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version").Order("r.due_date_utc, r.delivery_receivable_id").Limit(query.PageSize).Find(&models).Error; err != nil {
+	if err := base.Select("r.delivery_receivable_id, r.company_account_id, a.company_name, r.invoice_number, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version").Order("r.due_date_utc, r.delivery_receivable_id").Limit(query.PageSize).Find(&models).Error; err != nil {
 		return nil, 0, fmt.Errorf("list filtered receivables: %w", err)
 	}
 	result := make([]DeliveryReceivable, 0, len(models))
@@ -99,11 +99,16 @@ func (repository *GormRepository) ListFiltered(ctx context.Context, query ListQu
 }
 
 func applyFilters(query *gorm.DB, input ListQuery, today, nearEnd time.Time) *gorm.DB {
-	if company := input.Company; company != "" {
-		query = query.Where("a.company_name LIKE ? ESCAPE '\\'", "%"+escapeLike(company)+"%")
+	if len(input.CompanyAccountIDs) > 0 {
+		query = query.Where("r.company_account_id IN ?", input.CompanyAccountIDs)
+	} else if input.CompanyFilterProvided {
+		query = query.Where("1 = 0")
+	}
+	if invoice := input.Invoice; invoice != "" {
+		query = query.Where("r.invoice_number LIKE ? ESCAPE '\\'", "%"+escapeLike(invoice)+"%")
 	}
 	if po := input.PO; po != "" {
-		query = query.Where("r.po_number_normalized LIKE ? ESCAPE '\\'", escapeLike(po)+"%")
+		query = query.Where("r.po_number_normalized LIKE ? ESCAPE '\\'", "%"+escapeLike(po)+"%")
 	}
 	statuses := input.Statuses
 	if len(statuses) == 0 {
@@ -151,6 +156,7 @@ func (repository *GormRepository) Update(ctx context.Context, db *gorm.DB, recei
 		Where("delivery_receivable_id = ? AND row_version = ?", receivable.ID, originalVersion).
 		Updates(map[string]interface{}{
 			"company_account_id":   receivable.CompanyAccountID,
+			"invoice_number":       receivable.InvoiceNumber,
 			"po_number":            receivable.PONumber,
 			"po_number_normalized": receivable.PONumberNormalized,
 			"delivery_date_utc":    receivable.DeliveryDateUTC,
@@ -177,6 +183,19 @@ func (repository *GormRepository) FindBlockingPONumber(ctx context.Context, db *
 	}
 	if err := query.Count(&count).Error; err != nil {
 		return false, fmt.Errorf("check duplicate PO: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (repository *GormRepository) FindBlockingInvoiceNumber(ctx context.Context, db *gorm.DB, invoiceNumber string, excludeID int64) (bool, error) {
+	var count int64
+	query := db.WithContext(ctx).Model(&receivableModel{}).
+		Where("invoice_number = ? AND lifecycle_status IN (?, ?)", invoiceNumber, "Active", "Archived")
+	if excludeID > 0 {
+		query = query.Where("delivery_receivable_id <> ?", excludeID)
+	}
+	if err := query.Count(&count).Error; err != nil {
+		return false, fmt.Errorf("check duplicate invoice number: %w", err)
 	}
 	return count > 0, nil
 }

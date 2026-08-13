@@ -94,6 +94,41 @@ func (repository *GormRepository) GetTotals(ctx context.Context, query Query) (D
 	return totals, nil
 }
 
+func (repository *GormRepository) GetCompanyTotals(ctx context.Context, companyAccountID int64, query Query) (CompanyTotals, error) {
+	today, nearEnd := boundaries(query.Now)
+	classificationSQL := classificationExpression()
+	sql := fmt.Sprintf(`WITH classified AS (
+	        SELECT amount_due_scaled, %s AS classification
+	        FROM dbo.delivery_receivables
+	        WHERE lifecycle_status = 'Active' AND company_account_id = ?
+	    )
+	    SELECT classification,
+	        COUNT_BIG(*) AS receivable_count,
+	        COUNT(DISTINCT 1) AS client_count,
+	        COALESCE(SUM(amount_due_scaled), 0) AS amount_scaled
+	        FROM classified
+	        GROUP BY classification`, classificationSQL)
+	var rows []aggregateRow
+	if err := repository.db.WithContext(ctx).Raw(sql, today, nearEnd, companyAccountID).Scan(&rows).Error; err != nil {
+		return CompanyTotals{}, fmt.Errorf("load company dashboard totals: %w", err)
+	}
+	var totals CompanyTotals
+	for _, row := range rows {
+		total := ClassificationTotal{ReceivableCount: row.ReceivableCount, ClientCount: row.ClientCount, AmountScaled: row.AmountScaled}
+		switch row.Classification {
+		case "Pending":
+			totals.Pending = total
+		case "Near Due":
+			totals.NearDue = total
+		case "Overdue":
+			totals.Overdue = total
+		case "Payment Received":
+			totals.PaymentReceived = total
+		}
+	}
+	return totals, nil
+}
+
 func classificationExpression() string {
 	return `CASE
         WHEN payment_date_utc IS NOT NULL THEN 'Payment Received'

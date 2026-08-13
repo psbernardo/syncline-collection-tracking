@@ -11,12 +11,13 @@ import (
 )
 
 var (
-	ErrNotFound            = errors.New("delivery receivable not found")
-	ErrCompanyNotFound     = errors.New("company account not found")
-	ErrConflict            = errors.New("delivery receivable was changed by another request")
-	ErrProtected           = errors.New("delivery receivable cannot be edited in its current state")
-	ErrDuplicatePO         = errors.New("PO number is already used by a non-cancelled receivable")
-	ErrIdempotencyConflict = errors.New("idempotency key was already used with a different request")
+	ErrNotFound               = errors.New("delivery receivable not found")
+	ErrCompanyNotFound        = errors.New("company account not found")
+	ErrConflict               = errors.New("delivery receivable was changed by another request")
+	ErrProtected              = errors.New("delivery receivable cannot be edited in its current state")
+	ErrDuplicatePO            = errors.New("PO number is already used by a non-cancelled receivable")
+	ErrDuplicateInvoiceNumber = errors.New("invoice number is already used by a non-cancelled receivable")
+	ErrIdempotencyConflict    = errors.New("idempotency key was already used with a different request")
 )
 
 type ValidationErrors map[string]string
@@ -38,6 +39,7 @@ type DeliveryReceivable struct {
 	ID                 int64
 	CompanyAccountID   int64
 	CompanyName        string
+	InvoiceNumber      string
 	PONumber           string
 	PONumberNormalized string
 	DeliveryDateUTC    time.Time
@@ -51,10 +53,16 @@ type DeliveryReceivable struct {
 	RowVersion         []byte
 }
 
-func NewDeliveryReceivable(companyID int64, poNumber, amountInput, deliveryInput string, termDays int) (DeliveryReceivable, error) {
+func NewDeliveryReceivable(companyID int64, invoiceNumber, poNumber, amountInput, deliveryInput string, termDays int) (DeliveryReceivable, error) {
 	errors := ValidationErrors{}
 	if companyID < 1 {
 		errors["CompanyAccountID"] = "Select a company."
+	}
+	invoiceNumber = strings.TrimSpace(invoiceNumber)
+	if invoiceNumber == "" {
+		errors["InvoiceNumber"] = "This field is required."
+	} else if len(invoiceNumber) > 100 || !isAlphaNumeric(invoiceNumber) {
+		errors["InvoiceNumber"] = "Use 1-100 ASCII letters and numbers only."
 	}
 	poNumber = strings.TrimSpace(poNumber)
 	if poNumber == "" {
@@ -82,6 +90,7 @@ func NewDeliveryReceivable(companyID int64, poNumber, amountInput, deliveryInput
 	}
 	return DeliveryReceivable{
 		CompanyAccountID:   companyID,
+		InvoiceNumber:      invoiceNumber,
 		PONumber:           poNumber,
 		PONumberNormalized: NormalizePONumber(poNumber),
 		DeliveryDateUTC:    deliveryDate,

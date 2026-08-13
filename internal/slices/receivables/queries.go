@@ -12,9 +12,13 @@ import (
 )
 
 type ListQuery struct {
-	Company  string
-	PO       string
-	Statuses []string
+	CompanyAccountIDs []int64
+	Invoice           string
+	PO                string
+	Statuses          []string
+	// CompanyFilterProvided distinguishes an omitted company filter from one
+	// containing only invalid values.
+	CompanyFilterProvided bool
 	// StatusFilterProvided distinguishes an omitted status filter from one
 	// containing only invalid values.
 	StatusFilterProvided bool
@@ -24,13 +28,26 @@ type ListQuery struct {
 }
 
 func normalizeListQuery(query ListQuery) ListQuery {
-	query.Company = strings.TrimSpace(query.Company)
+	query.CompanyAccountIDs = normalizeCompanyAccountIDs(query.CompanyAccountIDs)
+	query.Invoice = strings.TrimSpace(query.Invoice)
 	query.PO = NormalizePONumber(query.PO)
 	query.Statuses = normalizeStatuses(query.Statuses)
 	if query.PageSize < 1 || query.PageSize > 100 {
 		query.PageSize = 25
 	}
 	return query
+}
+
+func normalizeCompanyAccountIDs(values []int64) []int64 {
+	seen := make(map[int64]bool)
+	result := make([]int64, 0, len(values))
+	for _, value := range values {
+		if value > 0 && !seen[value] {
+			seen[value] = true
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 type ListResult struct {
@@ -67,10 +84,11 @@ func decodeCursor(value string) (cursor, error) {
 
 func filterSignature(query ListQuery) string {
 	payload, _ := json.Marshal(struct {
-		Company  string   `json:"company"`
-		PO       string   `json:"po"`
-		Statuses []string `json:"statuses"`
-	}{Company: query.Company, PO: query.PO, Statuses: query.Statuses})
+		CompanyAccountIDs []int64  `json:"company_account_ids"`
+		Invoice           string   `json:"invoice"`
+		PO                string   `json:"po"`
+		Statuses          []string `json:"statuses"`
+	}{CompanyAccountIDs: query.CompanyAccountIDs, Invoice: query.Invoice, PO: query.PO, Statuses: query.Statuses})
 	return base64.RawURLEncoding.EncodeToString(payload)
 }
 
@@ -100,6 +118,7 @@ type ReceivableViewModel struct {
 	ID                 int64
 	CompanyAccountID   int64
 	CompanyName        string
+	InvoiceNumber      string
 	PONumber           string
 	AmountDisplay      string
 	DeliveryDate       string
@@ -132,9 +151,9 @@ type ReceivableFormViewModel struct {
 
 func toViewModel(receivable DeliveryReceivable, now time.Time) ReceivableViewModel {
 	return ReceivableViewModel{
-		ID: receivable.ID, CompanyAccountID: receivable.CompanyAccountID, PONumber: receivable.PONumber,
+		ID: receivable.ID, CompanyAccountID: receivable.CompanyAccountID, InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber,
 		CompanyName:   receivable.CompanyName,
-		AmountDisplay: receivable.AmountDue.Format(), DeliveryDate: businessdate.FormatUTC(receivable.DeliveryDateUTC),
+		AmountDisplay: receivable.AmountDue.FormatPHP(), DeliveryDate: businessdate.FormatUTC(receivable.DeliveryDateUTC),
 		DueDate: businessdate.FormatUTC(receivable.DueDateUTC), PaymentTermDays: receivable.PaymentTermDays,
 		LifecycleStatus: receivable.LifecycleStatus, Classification: receivable.Classification(now),
 		ClassificationTone: classificationTone(receivable.ClassificationAt(now)),

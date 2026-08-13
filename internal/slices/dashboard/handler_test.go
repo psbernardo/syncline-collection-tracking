@@ -35,7 +35,7 @@ func TestDashboardRendersSummaryCards(t *testing.T) {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
 	}
 	body := recorder.Body.String()
-	for _, value := range []string{"Collection dashboard", "Overdue", "9800.34 PHP", "2 receivables", "1 clients", "Receivables by client", "Acme Foods", "Total receivables", "Details", `href="/receivables?company=Acme`} {
+	for _, value := range []string{"Collection dashboard", "Total outstanding", "Overdue + near due + pending", "₱9,800.34", "2 receivables", "1 clients", "Receivables by client", "Acme Foods", "Total receivables", "Details", `href="/receivables?company=7"`} {
 		if !strings.Contains(body, value) {
 			t.Errorf("dashboard does not contain %q", value)
 		}

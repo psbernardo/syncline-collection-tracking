@@ -6,6 +6,8 @@ a { color: inherit; }
 .app-shell { min-height: 100vh; }
 .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; width: 16rem; border-right: 1px solid #e5e7eb; background: #fff; padding: 1.25rem 1rem; }
 .brand { display: flex; align-items: center; gap: .7rem; color: #111827; font-size: .98rem; font-weight: 800; text-decoration: none; }
+.sidebar .brand { align-items: flex-start; }
+.brand-name { flex: 1; font-size: 1.12rem; line-height: 1.12; letter-spacing: -.025em; }
 .brand-mark { display: inline-grid; width: 2rem; height: 2rem; place-items: center; border-radius: .65rem; background: #4f46e5; color: #fff; font-size: .72rem; letter-spacing: .04em; }
 .sidebar-nav { display: grid; gap: .35rem; margin-top: 2rem; }
 .nav-section-label { margin: 1.25rem .75rem .35rem; color: #9ca3af; font-size: .67rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
@@ -53,8 +55,19 @@ textarea { min-height: 6rem; resize: vertical; }
 .summary-card.status-overdue { border-top-color: #dc2626; }
 .summary-card.status-near-due { border-top-color: #d97706; }
 .summary-card.status-payment-received { border-top-color: #16a34a; }
-.summary-count { display: block; margin: .5rem 0 1rem; color: #111827; font-size: 1.55rem; letter-spacing: -.02em; }
-.summary-amount { color: #6b7280; font-size: .76rem; }
+.dashboard-total { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; border: 1px solid #c7d2fe; border-radius: .75rem; padding: 1.5rem 1.5rem; background: #eef2ff; }
+.dashboard-total .eyebrow { font-size: .85rem; }
+.dashboard-total strong { color: #000; font-size: 2.75rem; letter-spacing: -.035em; }
+.dashboard-total-note { margin: .25rem 0 0; color: #6366f1; font-size: .78rem; }
+.company-receivables { margin-bottom: 1.25rem; }
+.company-receivables-heading { margin-bottom: 1rem; }
+.company-receivables-heading h2 { margin: .3rem 0 0; color: #111827; font-size: 1.25rem; }
+.company-receivables-note { margin: .35rem 0 0; color: #4f46e5; font-size: .88rem; font-weight: 700; }
+.company-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.company-summary-grid .summary-card { padding: .9rem 1rem; }
+.company-summary-grid .summary-amount { margin: .35rem 0 .7rem; font-size: 1.15rem; }
+.company-summary-grid .summary-meta { font-size: .7rem; }
+.summary-amount { display: block; margin: .5rem 0 1rem; color: #111827; font-size: 1.55rem; letter-spacing: -.02em; }
 .summary-meta { display: flex; justify-content: space-between; gap: .5rem; color: #6b7280; font-size: .76rem; }
 .client-summary { margin-top: 1rem; overflow: hidden; }
 .client-summary td:not(:first-child), .client-summary th:not(:first-child) { text-align: right; }

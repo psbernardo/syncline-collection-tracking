@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/psbernardo/syncline-collection-tracking/internal/slices/dashboard"
 	"gorm.io/gorm"
 )
 
@@ -74,8 +75,40 @@ func TestEditFormRendersCurrentAccount(t *testing.T) {
 	}
 }
 
+func TestEditFormRendersCompanyReceivablesSummary(t *testing.T) {
+	repository := &fakeRepository{account: CompanyAccount{ID: 1, CompanyName: "Acme Corp", RowVersion: []byte{1}}}
+	companyTotals := dashboard.NewCompanyTotalsService(fakeCompanyTotalsRepository{})
+	handler, err := NewHandler(NewService(nil, repository), companyTotals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/accounts/1/edit", nil)
+	request.SetPathValue("id", "1")
+	handler.editForm(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	body := recorder.Body.String()
+	for _, value := range []string{"Collection summary", "Total outstanding: ₱600.00", "₱300.00", "3 receivables"} {
+		if !strings.Contains(body, value) {
+			t.Errorf("edit form does not contain %q", value)
+		}
+	}
+}
+
 type fakeRepository struct {
 	account CompanyAccount
+}
+
+type fakeCompanyTotalsRepository struct{}
+
+func (fakeCompanyTotalsRepository) GetCompanyTotals(context.Context, int64, dashboard.Query) (dashboard.CompanyTotals, error) {
+	return dashboard.CompanyTotals{
+		Pending: dashboard.ClassificationTotal{AmountScaled: 1_000_000},
+		NearDue: dashboard.ClassificationTotal{AmountScaled: 2_000_000},
+		Overdue: dashboard.ClassificationTotal{AmountScaled: 3_000_000, ReceivableCount: 3},
+	}, nil
 }
 
 func (repository *fakeRepository) Create(_ context.Context, _ *gorm.DB, account CompanyAccount) (CompanyAccount, error) {

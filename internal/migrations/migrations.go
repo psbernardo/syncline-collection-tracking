@@ -18,6 +18,8 @@ var registry = []Migration{
 	{Version: 1, Name: "create collection tracking schema", Up: up0001, Down: down0001},
 	{Version: 2, Name: "add company account rowversion", Up: up0002, Down: down0002},
 	{Version: 3, Name: "enforce non-cancelled PO uniqueness", Up: up0003, Down: down0003},
+	{Version: 4, Name: "add required receivable invoice number", Up: up0004, Down: down0004},
+	{Version: 5, Name: "enforce non-cancelled invoice uniqueness", Up: up0005, Down: down0005},
 }
 
 func Status(ctx context.Context, db *gorm.DB) error {
