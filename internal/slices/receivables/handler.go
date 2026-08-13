@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -19,10 +20,11 @@ import (
 var templateFiles embed.FS
 
 type Handler struct {
-	service        *service
-	listTemplate   *template.Template
-	formTemplate   *template.Template
-	detailTemplate *template.Template
+	service         *service
+	listTemplate    *template.Template
+	formTemplate    *template.Template
+	detailTemplate  *template.Template
+	paymentTemplate *template.Template
 }
 
 type listPage struct {
@@ -38,10 +40,28 @@ type listPage struct {
 
 type statusOption struct{ Value, Label string }
 
+const (
+	initialListPageSize = 10
+	loadMorePageSize    = 5
+)
+
 type formPage struct {
 	Title     string
 	ActiveNav string
 	Form      ReceivableFormViewModel
+}
+
+type detailPage struct {
+	Title      string
+	ActiveNav  string
+	Receivable ReceivableViewModel
+}
+
+type paymentPage struct {
+	Title       string
+	ActiveNav   string
+	Receivable  ReceivableViewModel
+	PaymentForm PaymentFormViewModel
 }
 
 func NewHandler(service *service) (*Handler, error) {
@@ -65,7 +85,13 @@ func NewHandler(service *service) (*Handler, error) {
 			}
 		}
 		return false
-	}}
+	}, "statusLabel": func(value string) string {
+		labels := map[string]string{"pending": "Pending", "near_due": "Near due", "overdue": "Overdue", "payment_received": "Payment received", "cancelled": "Cancelled", "archived": "Archived"}
+		if label, ok := labels[value]; ok {
+			return label
+		}
+		return value
+	}, "loadMoreURL": receivableLoadMoreURL}
 	listTemplate, err := template.New("list").Funcs(functions).ParseFS(webtemplates.FS, "layout.html", "partials/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse receivable list templates: %w", err)
@@ -90,7 +116,15 @@ func NewHandler(service *service) (*Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse receivable detail page templates: %w", err)
 	}
-	return &Handler{service: service, listTemplate: listTemplate, formTemplate: formTemplate, detailTemplate: detailTemplate}, nil
+	paymentTemplate, err := template.New("payment").Funcs(functions).ParseFS(webtemplates.FS, "layout.html", "partials/*.html")
+	if err != nil {
+		return nil, fmt.Errorf("parse receivable payment layout: %w", err)
+	}
+	paymentTemplate, err = paymentTemplate.ParseFS(templateFiles, "templates/payment.html", "templates/partials/*.html")
+	if err != nil {
+		return nil, fmt.Errorf("parse receivable payment page templates: %w", err)
+	}
+	return &Handler{service: service, listTemplate: listTemplate, formTemplate: formTemplate, detailTemplate: detailTemplate, paymentTemplate: paymentTemplate}, nil
 }
 
 func (handler *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -98,12 +132,20 @@ func (handler *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /receivables/new", handler.newForm)
 	mux.HandleFunc("POST /receivables", handler.create)
 	mux.HandleFunc("GET /receivables/{id}", handler.detail)
+	mux.HandleFunc("GET /receivables/{id}/payment", handler.payment)
 	mux.HandleFunc("GET /receivables/{id}/edit", handler.editForm)
 	mux.HandleFunc("POST /receivables/{id}", handler.update)
+	mux.HandleFunc("POST /receivables/{id}/payment", handler.receivePayment)
 }
 
 func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 	query := parseListQuery(r)
+	loadMore := r.URL.Query().Get("load_more") == "1"
+	if loadMore {
+		query.PageSize = loadMorePageSize
+	} else {
+		query.PageSize = initialListPageSize
+	}
 	accounts, err := handler.service.Accounts(r.Context())
 	if err != nil {
 		handler.serverError(w, err)
@@ -116,10 +158,34 @@ func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	page := listPage{Title: "Receivables", ActiveNav: "receivables", Receivables: result.Items, NextCursor: result.NextCursor, RemainingCount: result.RemainingCount, Filters: query, CompanyFilter: companyFilter(accounts, query.CompanyAccountIDs), StatusFilter: statusFilter(query.Statuses)}
 	if isHTMX(r) {
+		if loadMore {
+			handler.render(w, handler.listTemplate, "receivable-load-more", page)
+			return
+		}
 		handler.render(w, handler.listTemplate, "receivable-results", page)
 		return
 	}
 	handler.render(w, handler.listTemplate, "layout", page)
+}
+
+func receivableLoadMoreURL(query ListQuery, cursor string) string {
+	values := url.Values{}
+	for _, companyID := range query.CompanyAccountIDs {
+		values.Add("company", strconv.FormatInt(companyID, 10))
+	}
+	if query.Invoice != "" {
+		values.Set("invoice", query.Invoice)
+	}
+	if query.PO != "" {
+		values.Set("po", query.PO)
+	}
+	for _, status := range query.Statuses {
+		values.Add("status", status)
+	}
+	values.Set("cursor", cursor)
+	values.Set("page_size", strconv.Itoa(loadMorePageSize))
+	values.Set("load_more", "1")
+	return "/receivables?" + values.Encode()
 }
 
 func parseListQuery(r *http.Request) ListQuery {
@@ -361,11 +427,98 @@ func (handler *Handler) detail(w http.ResponseWriter, r *http.Request) {
 		handler.serverError(w, err)
 		return
 	}
-	handler.render(w, handler.detailTemplate, "layout", struct {
-		Title      string
-		ActiveNav  string
-		Receivable ReceivableViewModel
-	}{Title: "Receivable detail", ActiveNav: "receivables", Receivable: receivable})
+	view := detailPage{Title: "Receivable detail", ActiveNav: "receivables", Receivable: receivable}
+	handler.render(w, handler.detailTemplate, "layout", view)
+}
+
+func (handler *Handler) payment(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id < 1 {
+		http.NotFound(w, r)
+		return
+	}
+	receivable, err := handler.service.Get(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		handler.serverError(w, err)
+		return
+	}
+	if !receivable.CanReceivePayment {
+		w.Header().Set("X-Feedback-Message", "This receivable cannot be marked as paid in its current state.")
+		http.Error(w, "This receivable cannot be marked as paid in its current state.", http.StatusConflict)
+		return
+	}
+	key, err := NewIdempotencyKey()
+	if err != nil {
+		handler.serverError(w, err)
+		return
+	}
+	view := paymentPage{Title: "Acknowledge payment", ActiveNav: "receivables", Receivable: receivable,
+		PaymentForm: PaymentFormViewModel{Action: "/receivables/" + strconv.FormatInt(id, 10) + "/payment", ReceivableID: id, PaymentDate: businessdate.FormatUTC(handler.service.now()), AmountDisplay: receivable.AmountDisplay, RowVersion: receivable.RowVersion, IdempotencyKey: key}}
+	handler.render(w, handler.paymentTemplate, "layout", view)
+}
+
+func (handler *Handler) receivePayment(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id < 1 {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		handler.serverError(w, err)
+		return
+	}
+	version, err := base64.RawURLEncoding.DecodeString(r.FormValue("row_version"))
+	if err != nil {
+		http.Error(w, "Invalid payment version", http.StatusBadRequest)
+		return
+	}
+	command := ReceivePaymentCommand{ID: id, PaymentDate: r.FormValue("payment_date"), OriginalVersion: version, RequestID: requestID(r), IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin"}
+	if _, err := handler.service.ReceivePayment(r.Context(), command); err != nil {
+		var validation ValidationErrors
+		if errors.As(err, &validation) {
+			form := PaymentFormViewModel{Action: "/receivables/" + strconv.FormatInt(id, 10) + "/payment", ReceivableID: id, PaymentDate: command.PaymentDate, RowVersion: r.FormValue("row_version"), IdempotencyKey: command.IdempotencyKey, Errors: validation}
+			entity, getErr := handler.service.Get(r.Context(), id)
+			if getErr != nil {
+				handler.serverError(w, getErr)
+				return
+			}
+			form.AmountDisplay = entity.AmountDisplay
+			if isHTMX(r) {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				handler.render(w, handler.paymentTemplate, "payment-form", form)
+				return
+			}
+			key, keyErr := NewIdempotencyKey()
+			if keyErr != nil {
+				handler.serverError(w, keyErr)
+				return
+			}
+			form.IdempotencyKey = key
+			handler.render(w, handler.paymentTemplate, "layout", paymentPage{Title: "Acknowledge payment", ActiveNav: "receivables", Receivable: entity, PaymentForm: form})
+			return
+		}
+		if errors.Is(err, ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		if errors.Is(err, ErrConflict) || errors.Is(err, ErrAlreadyPaid) || errors.Is(err, ErrPaymentNotAllowed) {
+			w.Header().Set("X-Feedback-Message", "This receivable cannot be marked as paid in its current state.")
+			http.Error(w, "This receivable cannot be marked as paid in its current state. Reload and try again.", http.StatusConflict)
+			return
+		}
+		handler.serverError(w, err)
+		return
+	}
+	if isHTMX(r) {
+		w.Header().Set("HX-Redirect", "/receivables/"+strconv.FormatInt(id, 10))
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Redirect(w, r, "/receivables/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 }
 
 func (handler *Handler) render(w http.ResponseWriter, parsed *template.Template, name string, data any) {

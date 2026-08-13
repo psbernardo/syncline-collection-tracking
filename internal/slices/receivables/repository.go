@@ -2,6 +2,7 @@ package receivables
 
 import (
 	"context"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -12,6 +13,7 @@ type Repository interface {
 	List(ctx context.Context) ([]DeliveryReceivable, error)
 	ListFiltered(ctx context.Context, query ListQuery) ([]DeliveryReceivable, int64, error)
 	Update(ctx context.Context, db *gorm.DB, receivable DeliveryReceivable, originalVersion []byte) (DeliveryReceivable, error)
+	MarkPaymentReceived(ctx context.Context, db *gorm.DB, id int64, paymentDate time.Time, originalVersion []byte) (DeliveryReceivable, error)
 	FindBlockingPONumber(ctx context.Context, db *gorm.DB, normalizedPO string, excludeID int64) (bool, error)
 	FindBlockingInvoiceNumber(ctx context.Context, db *gorm.DB, invoiceNumber string, excludeID int64) (bool, error)
 }

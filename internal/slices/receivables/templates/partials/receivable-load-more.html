@@ -1,0 +1,3 @@
+{{ define "receivable-load-more" }}{{ range .Receivables }}{{ template "receivable-row" . }}{{ end }}{{ if .NextCursor }}{{ template "receivable-load-more-sentinel" . }}{{ end }}{{ end }}
+
+{{ define "receivable-load-more-sentinel" }}<tr class="load-more-sentinel" hx-get="{{ loadMoreURL .Filters .NextCursor }}" hx-trigger="revealed" hx-target="this" hx-swap="outerHTML" hx-indicator="find .load-more-indicator"><td colspan="9"><span class="load-more-label">Scroll to load more ({{ .RemainingCount }} remaining)</span><span class="load-more-indicator htmx-indicator" aria-live="polite">Loading...</span></td></tr>{{ end }}

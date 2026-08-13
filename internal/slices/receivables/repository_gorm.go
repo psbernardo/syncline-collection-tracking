@@ -174,6 +174,19 @@ func (repository *GormRepository) Update(ctx context.Context, db *gorm.DB, recei
 	return repository.FindByID(ctx, db, receivable.ID)
 }
 
+func (repository *GormRepository) MarkPaymentReceived(ctx context.Context, db *gorm.DB, id int64, paymentDate time.Time, originalVersion []byte) (DeliveryReceivable, error) {
+	result := db.WithContext(ctx).Model(&receivableModel{}).
+		Where("delivery_receivable_id = ? AND row_version = ? AND lifecycle_status = ? AND payment_date_utc IS NULL", id, originalVersion, "Active").
+		Updates(map[string]interface{}{"payment_date_utc": paymentDate, "updated_at_utc": gorm.Expr("SYSUTCDATETIME()")})
+	if result.Error != nil {
+		return DeliveryReceivable{}, fmt.Errorf("mark payment received: %w", result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return DeliveryReceivable{}, ErrConflict
+	}
+	return repository.FindByID(ctx, db, id)
+}
+
 func (repository *GormRepository) FindBlockingPONumber(ctx context.Context, db *gorm.DB, normalizedPO string, excludeID int64) (bool, error) {
 	var count int64
 	query := db.WithContext(ctx).Model(&receivableModel{}).

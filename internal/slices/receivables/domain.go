@@ -18,6 +18,8 @@ var (
 	ErrDuplicatePO            = errors.New("PO number is already used by a non-cancelled receivable")
 	ErrDuplicateInvoiceNumber = errors.New("invoice number is already used by a non-cancelled receivable")
 	ErrIdempotencyConflict    = errors.New("idempotency key was already used with a different request")
+	ErrAlreadyPaid            = errors.New("delivery receivable has already been paid")
+	ErrPaymentNotAllowed      = errors.New("payment cannot be recorded for this receivable")
 )
 
 type ValidationErrors map[string]string
@@ -144,6 +146,25 @@ func (receivable DeliveryReceivable) DaysUntilDueAt(now time.Time) int {
 	today, _ := businessdate.Parse(businessdate.FormatUTC(now))
 	due, _ := businessdate.Parse(businessdate.FormatUTC(receivable.DueDateUTC))
 	return int(due.Sub(today).Hours() / 24)
+}
+
+func ValidatePaymentDate(receivable DeliveryReceivable, input string, now time.Time) (time.Time, error) {
+	validation := ValidationErrors{}
+	paymentDate, err := businessdate.Parse(strings.TrimSpace(input))
+	if err != nil {
+		validation["PaymentDate"] = "Enter a valid payment date."
+	} else {
+		paymentValue := businessdate.FormatUTC(paymentDate)
+		if paymentValue < businessdate.FormatUTC(receivable.DeliveryDateUTC) {
+			validation["PaymentDate"] = "Payment date cannot be before the delivery date."
+		} else if paymentValue > businessdate.FormatUTC(now) {
+			validation["PaymentDate"] = "Payment date cannot be in the future."
+		}
+	}
+	if len(validation) > 0 {
+		return time.Time{}, validation
+	}
+	return paymentDate, nil
 }
 
 func isAlphaNumeric(value string) bool {
