@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+docker.env
+docker.env.*
+.vscode
+analysis
+bin
+dist
+*.log
+coverage.out
+docker-compose*.yml

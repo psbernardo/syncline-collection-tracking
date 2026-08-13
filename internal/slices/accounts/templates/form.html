@@ -1,0 +1,8 @@
+{{ define "content" }}
+<div class="page-heading">
+  <div><p class="eyebrow">Accounts</p><h1>{{ .Form.PageTitle }}</h1><p class="muted">All fields are required.</p></div>
+  <a class="button" href="/accounts">Back to accounts</a>
+</div>
+{{ if .CompanyTotals }}{{ template "company-receivables" .CompanyTotals }}{{ end }}
+{{ template "account-form" .Form }}
+{{ end }}

@@ -1,0 +1,13 @@
+{{ define "account-form" }}
+<form id="account-form" class="card form-grid" method="post" action="{{ .Action }}" hx-post="{{ .Action }}" hx-target="#account-form" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']">
+  <input type="hidden" name="idempotency_key" value="{{ .IdempotencyKey }}">
+  {{ if eq .Mode "edit" }}<input type="hidden" name="row_version" value="{{ .RowVersion }}">{{ end }}
+  {{ template "field" dict "id" "company_name" "label" "Company name" "name" "CompanyName" "value" .Values.CompanyName "error" .Errors.CompanyName }}
+  {{ template "field" dict "id" "contact_person" "label" "Contact person" "name" "ContactPerson" "value" .Values.ContactPerson "error" .Errors.ContactPerson }}
+  {{ template "field" dict "id" "tin_number" "label" "TIN number" "name" "TINNumber" "value" .Values.TINNumber "error" .Errors.TINNumber }}
+  {{ template "field" dict "id" "contact_number" "label" "Contact number" "name" "ContactNumber" "value" .Values.ContactNumber "error" .Errors.ContactNumber }}
+  {{ template "textarea" dict "id" "billing_address" "label" "Billing address" "name" "BillingAddress" "value" .Values.BillingAddress "error" .Errors.BillingAddress }}
+  {{ template "textarea" dict "id" "delivery_address" "label" "Delivery address" "name" "DeliveryAddress" "value" .Values.DeliveryAddress "error" .Errors.DeliveryAddress }}
+  <div class="form-actions"><a class="button" href="/accounts">Cancel</a><button class="button button-primary" type="submit">{{ .SubmitLabel }}</button></div>
+</form>
+{{ end }}

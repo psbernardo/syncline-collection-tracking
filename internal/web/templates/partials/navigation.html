@@ -1,0 +1,15 @@
+{{ define "navigation" }}
+<aside class="sidebar" :class="{ 'is-open': navOpen }" aria-label="Primary navigation">
+  <a class="brand" href="/dashboard" @click="navOpen = false"><span class="brand-mark">SL</span><span class="brand-name">Syncline Consumer Goods Trading</span></a>
+  <nav class="sidebar-nav">
+    <p class="nav-section-label">Workspace</p>
+    <a href="/dashboard" @click="navOpen = false"{{ if eq .ActiveNav "dashboard" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">D</span>Dashboard</a>
+    <a href="/accounts" @click="navOpen = false"{{ if eq .ActiveNav "accounts" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">C</span>Company accounts</a>
+    <a href="/receivables" @click="navOpen = false"{{ if eq .ActiveNav "receivables" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">R</span>Receivables</a>
+    <p class="nav-section-label">Actions</p>
+    <a href="/accounts/new" @click="navOpen = false" class="nav-action">+ New account</a>
+    <a href="/receivables/new" @click="navOpen = false" class="nav-action">+ New receivable</a>
+  </nav>
+</aside>
+<header class="mobile-header"><a class="brand" href="/dashboard">Syncline</a><button class="menu-toggle" type="button" @click="navOpen = !navOpen" :aria-expanded="navOpen.toString()" aria-controls="primary-navigation"><span class="sr-only">Toggle navigation</span>Menu</button></header>
+{{ end }}
