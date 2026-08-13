@@ -108,3 +108,31 @@ func TestClassificationBoundaries(t *testing.T) {
 		t.Fatalf("days overdue = %d, want 3", got)
 	}
 }
+
+func TestValidatePaymentDate(t *testing.T) {
+	receivable, err := NewDeliveryReceivable(1, "0127", "PO123", "100", "2026-08-10", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now, _ := time.Parse(time.RFC3339, "2026-08-15T02:00:00Z")
+	if _, err := ValidatePaymentDate(receivable, "2026-08-10", now); err != nil {
+		t.Fatalf("delivery date payment should be valid: %v", err)
+	}
+	for _, input := range []string{"2026-08-09", "2026-08-16", "invalid"} {
+		if _, err := ValidatePaymentDate(receivable, input, now); err == nil {
+			t.Fatalf("payment date %q should be rejected", input)
+		}
+	}
+}
+
+func TestPaidReceivableClassificationTakesPrecedence(t *testing.T) {
+	receivable, err := NewDeliveryReceivable(1, "0127", "PO123", "100", "2026-08-10", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paidDate, _ := time.Parse(time.RFC3339, "2026-08-20T00:00:00Z")
+	receivable.PaymentDateUTC = &paidDate
+	if got := receivable.ClassificationAt(time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)); got != ClassificationPaymentReceived {
+		t.Fatalf("classification = %q, want Payment Received", got)
+	}
+}

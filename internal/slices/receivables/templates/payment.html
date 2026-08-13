@@ -1,0 +1,15 @@
+{{ define "content" }}
+<div id="payment-page">
+  <nav class="payment-breadcrumb" aria-label="Breadcrumb"><a href="/receivables">Receivables</a><span aria-hidden="true">/</span><a href="/receivables/{{ .Receivable.ID }}">Invoice {{ .Receivable.InvoiceNumber }}</a><span aria-hidden="true">/</span><span aria-current="page">Acknowledge payment</span></nav>
+  <header class="payment-page-heading"><div><p class="eyebrow">Collections</p><h1>Acknowledge full payment</h1><p class="muted">Confirm the payment received for this delivery receivable.</p></div></header>
+  <div class="payment-layout">
+    <section class="card payment-summary-card" aria-labelledby="payment-summary-heading">
+      <div class="payment-summary-header"><div><p class="eyebrow">Receivable summary</p><h2 id="payment-summary-heading">{{ .Receivable.CompanyName }}</h2><p class="payment-summary-subtitle">Invoice {{ .Receivable.InvoiceNumber }}</p></div><span class="status-badge status-{{ .Receivable.ClassificationTone }}">{{ .Receivable.Classification }}</span></div>
+      <div class="payment-summary-amount"><span class="eyebrow">Full amount due</span><strong>{{ .Receivable.AmountDisplay }}</strong><span>PHP</span></div>
+      <dl class="payment-summary-details"><div><dt>PO number</dt><dd>{{ .Receivable.PONumber }}</dd></div><div><dt>Delivery date</dt><dd>{{ .Receivable.DeliveryDate }}</dd></div><div><dt>Due date</dt><dd>{{ .Receivable.DueDate }}</dd></div><div><dt>Payment term</dt><dd>{{ .Receivable.PaymentTermDays }} days</dd></div></dl>
+      <a class="payment-back-link" href="/receivables/{{ .Receivable.ID }}">View receivable details <span aria-hidden="true">→</span></a>
+    </section>
+    {{ template "payment-form" .PaymentForm }}
+  </div>
+</div>
+{{ end }}

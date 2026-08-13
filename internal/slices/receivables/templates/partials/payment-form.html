@@ -1,0 +1,17 @@
+{{ define "payment-form" }}
+<section class="card payment-confirmation-card" aria-labelledby="payment-confirmation-heading">
+  <div class="payment-card-header">
+    <div><p class="eyebrow">Payment confirmation</p><h2 id="payment-confirmation-heading">Record full payment</h2></div>
+    <span class="payment-card-mark" aria-hidden="true">✓</span>
+  </div>
+  <div class="payment-amount-block"><span class="eyebrow">Amount to mark as paid</span><strong class="payment-amount">{{ .AmountDisplay }}</strong><span class="payment-currency">PHP</span></div>
+  <div class="payment-notice"><strong>Full payment only</strong><p>This action marks the entire receivable as paid. Partial payments are not supported.</p></div>
+  <form id="payment-form" method="post" action="{{ .Action }}" hx-post="{{ .Action }}" hx-target="#payment-form" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']">
+    <input type="hidden" name="idempotency_key" value="{{ .IdempotencyKey }}">
+    <input type="hidden" name="row_version" value="{{ .RowVersion }}">
+    <div class="field"><label for="payment_date">Payment received date</label><input id="payment_date" name="payment_date" type="date" value="{{ .PaymentDate }}" aria-describedby="payment-date-help payment-date-error" required><p id="payment-date-help" class="field-help">Use the date the full payment was received.</p><p id="payment-date-error" class="error" aria-live="polite">{{ .Errors.PaymentDate }}</p></div>
+    <div class="payment-protection"><span class="payment-protection-icon" aria-hidden="true">i</span><p>After acknowledgment, this receivable will show <strong>Payment Received</strong> and normal financial editing will be unavailable.</p></div>
+    <div class="payment-actions"><a class="button" href="/receivables/{{ .ReceivableID }}">Cancel</a><button class="button button-primary" type="submit">Acknowledge payment</button></div>
+  </form>
+</section>
+{{ end }}

@@ -124,11 +124,15 @@ type ReceivableViewModel struct {
 	DeliveryDate       string
 	DueDate            string
 	PaymentTermDays    int
+	PaymentDate        string
 	LifecycleStatus    string
 	Classification     string
 	ClassificationTone string
 	DaysOverdue        int
 	DaysUntilDue       int
+	CanReceivePayment  bool
+	CanEdit            bool
+	RowVersion         string
 }
 
 type AccountOption struct {
@@ -149,16 +153,36 @@ type ReceivableFormViewModel struct {
 	IdempotencyKey string
 }
 
+type PaymentFormViewModel struct {
+	Action         string
+	ReceivableID   int64
+	PaymentDate    string
+	AmountDisplay  string
+	RowVersion     string
+	IdempotencyKey string
+	Errors         ValidationErrors
+}
+
 func toViewModel(receivable DeliveryReceivable, now time.Time) ReceivableViewModel {
+	classification := receivable.ClassificationAt(now)
 	return ReceivableViewModel{
 		ID: receivable.ID, CompanyAccountID: receivable.CompanyAccountID, InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber,
 		CompanyName:   receivable.CompanyName,
 		AmountDisplay: receivable.AmountDue.FormatPHP(), DeliveryDate: businessdate.FormatUTC(receivable.DeliveryDateUTC),
 		DueDate: businessdate.FormatUTC(receivable.DueDateUTC), PaymentTermDays: receivable.PaymentTermDays,
-		LifecycleStatus: receivable.LifecycleStatus, Classification: receivable.Classification(now),
-		ClassificationTone: classificationTone(receivable.ClassificationAt(now)),
-		DaysOverdue:        receivable.DaysOverdueAt(now), DaysUntilDue: receivable.DaysUntilDueAt(now),
+		PaymentDate: paymentDateDisplay(receivable.PaymentDateUTC), LifecycleStatus: receivable.LifecycleStatus, Classification: string(classification),
+		ClassificationTone: classificationTone(classification), CanReceivePayment: receivable.LifecycleStatus == "Active" && receivable.PaymentDateUTC == nil,
+		CanEdit:     receivable.LifecycleStatus == "Active" && receivable.PaymentDateUTC == nil,
+		RowVersion:  base64.RawURLEncoding.EncodeToString(receivable.RowVersion),
+		DaysOverdue: receivable.DaysOverdueAt(now), DaysUntilDue: receivable.DaysUntilDueAt(now),
 	}
+}
+
+func paymentDateDisplay(value *time.Time) string {
+	if value == nil {
+		return ""
+	}
+	return businessdate.FormatUTC(*value)
 }
 
 func classificationTone(classification Classification) string {
