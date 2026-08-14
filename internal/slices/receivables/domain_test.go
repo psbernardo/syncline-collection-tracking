@@ -1,8 +1,11 @@
 package receivables
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/psbernardo/syncline-collection-tracking/internal/shared/tax"
 )
 
 func TestNormalizeListQuery(t *testing.T) {
@@ -21,6 +24,48 @@ func TestNormalizeListQuery(t *testing.T) {
 	}
 	if query.PageSize != 25 {
 		t.Fatalf("page size = %d, want 25", query.PageSize)
+	}
+}
+
+func TestNewDeliveryReceivableAppliesVATInclusiveEWT(t *testing.T) {
+	receivable, err := NewDeliveryReceivableWithTax(1, "INV2800", "PO2800", "2800.00", "2026-08-10", 5, tax.RuleVATInclusiveEWT1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receivable.GrossAmount.Format() != "2800.00" || receivable.TaxBase.Format() != "2500.00" || receivable.EWTAmount.Format() != "25.00" || receivable.AmountDue.Format() != "2775.00" {
+		t.Fatalf("tax amounts = gross %s, base %s, EWT %s, due %s", receivable.GrossAmount.Format(), receivable.TaxBase.Format(), receivable.EWTAmount.Format(), receivable.AmountDue.Format())
+	}
+}
+
+func TestNewDeliveryReceivableWithoutTaxRuleUsesGrossAsAmountDue(t *testing.T) {
+	receivable, err := NewDeliveryReceivableWithTax(1, "INVNONE", "PONONE", "2800.00", "2026-08-10", 5, tax.RuleNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receivable.TaxRuleCode != tax.RuleNone || receivable.EWTAmount != 0 || receivable.AmountDue != receivable.GrossAmount {
+		t.Fatalf("no-rule amounts = %+v", receivable)
+	}
+}
+
+func TestNewDeliveryReceivableRejectsUnknownTaxRule(t *testing.T) {
+	_, err := NewDeliveryReceivableWithTax(1, "INVUNKNOWN", "POUNKNOWN", "2800.00", "2026-08-10", 5, tax.RuleCode("unknown"))
+	validation, ok := err.(ValidationErrors)
+	if !ok || validation["TaxRuleCode"] == "" {
+		t.Fatalf("error = %#v, want tax rule validation", err)
+	}
+}
+
+func TestReceivableViewModelShowsTaxSnapshotForPayment(t *testing.T) {
+	receivable, err := NewDeliveryReceivableWithTax(1, "INVPAY", "POPAY", "2800.00", "2026-08-10", 5, tax.RuleVATInclusiveEWT1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := toViewModel(receivable, receivable.DueDateUTC)
+	if view.GrossAmountDisplay != "₱2,800.00" || view.TaxBaseDisplay != "₱2,500.00" || view.VATDisplay != "₱300.00" || view.EWTDisplay != "₱25.00" || view.NetPayableDisplay != "₱2,775.00" {
+		t.Fatalf("tax view = %+v", view)
+	}
+	if view.AmountDisplay != view.NetPayableDisplay {
+		t.Fatalf("payment amount = %q, net payable = %q", view.AmountDisplay, view.NetPayableDisplay)
 	}
 }
 
@@ -134,5 +179,16 @@ func TestPaidReceivableClassificationTakesPrecedence(t *testing.T) {
 	receivable.PaymentDateUTC = &paidDate
 	if got := receivable.ClassificationAt(time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)); got != ClassificationPaymentReceived {
 		t.Fatalf("classification = %q, want Payment Received", got)
+	}
+}
+
+func TestValidateReversalReason(t *testing.T) {
+	if reason, err := ValidateReversalReason("  acknowledged by mistake  "); err != nil || reason != "acknowledged by mistake" {
+		t.Fatalf("reason = %q, err = %v", reason, err)
+	}
+	for _, reason := range []string{"", strings.Repeat("x", 501)} {
+		if _, err := ValidateReversalReason(reason); err == nil {
+			t.Fatalf("reason %q should be rejected", reason)
+		}
 	}
 }

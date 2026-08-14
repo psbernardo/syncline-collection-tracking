@@ -1,0 +1,16 @@
+{{ define "receivable-tax-preview" }}
+<div id="receivable-tax-preview" class="receivable-tax-preview{{ if not .Visible }} is-empty{{ end }}">
+  {{ if .Visible }}
+  <div class="receivable-tax-preview-header"><strong>Tax computation</strong><span>Calculated from gross amount</span></div>
+  <dl class="receivable-tax-preview-grid">
+    <div><dt>Gross amount</dt><dd>{{ .GrossAmountDisplay }}</dd></div>
+    <div><dt>VAT-exclusive base</dt><dd>{{ .TaxBaseDisplay }}</dd></div>
+    <div><dt>VAT</dt><dd>{{ .VATDisplay }}</dd></div>
+    <div><dt>EWT</dt><dd>{{ .EWTDisplay }}</dd></div>
+    <div class="receivable-tax-preview-total"><dt>Net payable</dt><dd>{{ .NetPayableDisplay }}</dd></div>
+  </dl>
+  {{ else if .Error }}
+  <p class="receivable-tax-preview-error">{{ .Error }}</p>
+  {{ end }}
+</div>
+{{ end }}

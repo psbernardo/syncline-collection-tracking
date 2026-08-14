@@ -66,6 +66,20 @@ func TestMarkPaymentReceivedUsesProtectedPredicates(t *testing.T) {
 	}
 }
 
+func TestReversePaymentAcknowledgementUsesProtectedPredicates(t *testing.T) {
+	db := dryRunSQLServer(t)
+	sql := db.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		return tx.Table("dbo.delivery_receivables").
+			Where("delivery_receivable_id = ? AND row_version = ? AND lifecycle_status = ? AND payment_date_utc IS NOT NULL", int64(7), []byte("version"), "Active").
+			Updates(map[string]interface{}{"payment_date_utc": nil, "updated_at_utc": gorm.Expr("SYSUTCDATETIME()")})
+	})
+	for _, expected := range []string{"delivery_receivable_id =", "row_version =", "lifecycle_status =", "payment_date_utc IS NOT NULL"} {
+		if !strings.Contains(sql, expected) {
+			t.Fatalf("reversal update SQL = %s, missing %q", sql, expected)
+		}
+	}
+}
+
 func TestApplyFiltersAddsInvoicePredicate(t *testing.T) {
 	db := dryRunSQLServer(t)
 	query := db.Table("dbo.delivery_receivables AS r")

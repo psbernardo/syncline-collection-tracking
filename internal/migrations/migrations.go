@@ -20,6 +20,7 @@ var registry = []Migration{
 	{Version: 3, Name: "enforce non-cancelled PO uniqueness", Up: up0003, Down: down0003},
 	{Version: 4, Name: "add required receivable invoice number", Up: up0004, Down: down0004},
 	{Version: 5, Name: "enforce non-cancelled invoice uniqueness", Up: up0005, Down: down0005},
+	{Version: 6, Name: "add receivable tax rule amounts", Up: up0006, Down: down0006},
 }
 
 func Status(ctx context.Context, db *gorm.DB) error {

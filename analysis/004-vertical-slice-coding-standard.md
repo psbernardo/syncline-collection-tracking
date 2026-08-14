@@ -328,5 +328,5 @@ A vertical slice page is complete only when:
 - Go `net/http`: https://pkg.go.dev/net/http
 - HTMX documentation: https://htmx.org/docs/
 - Alpine.js documentation: https://alpinejs.dev/start-here
-- Tailwind UI plan: `analysis/tailwind-ui-plan.md`
-- First vertical slice plan: `analysis/first-vertical-slice-plan.md`
+- Tailwind UI plan: `analysis/005-tailwind-ui-plan.md`
+- First vertical slice plan: `analysis/003-first-vertical-slice-plan.md`

@@ -1,5 +1,9 @@
 # syncline-collection-tracking
 
+## Project Analysis
+
+Read [`analysis/000-implementation-ladder.md`](analysis/000-implementation-ladder.md) for the numbered implementation sequence and current-state evidence. Approved business decisions are in [`analysis/knowledge-base/001-business-domain.md`](analysis/knowledge-base/001-business-domain.md).
+
 ## Run with Docker Desktop
 
 Build the image from the repository root:
@@ -9,6 +13,8 @@ docker build -t syncline-collection-tracking:local .
 ```
 
 Copy `docker.env.example` to an untracked file named `docker.env` and set the SQL Server credentials. The default `HOST` value assumes SQL Server is running on the Docker Desktop host. If SQL Server runs in another container, use that container's network hostname instead.
+
+The HTTP server listens on port `8080` by default. Set `HTTP_PORT` in `docker.env` to use a different container port and publish that same port when starting the application.
 
 Apply database migrations:
 

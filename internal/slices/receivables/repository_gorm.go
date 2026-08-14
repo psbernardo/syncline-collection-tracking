@@ -29,7 +29,7 @@ func (repository *GormRepository) FindByID(ctx context.Context, db *gorm.DB, id 
 	}
 	var model receivableModel
 	if err := db.WithContext(ctx).Table("dbo.delivery_receivables AS r").
-		Select("r.delivery_receivable_id, r.company_account_id, a.company_name, r.invoice_number, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version").
+		Select(receivableSelect).
 		Joins("INNER JOIN dbo.company_accounts AS a ON a.company_account_id = r.company_account_id").
 		Where("r.delivery_receivable_id = ?", id).First(&model).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -43,7 +43,7 @@ func (repository *GormRepository) FindByID(ctx context.Context, db *gorm.DB, id 
 func (repository *GormRepository) List(ctx context.Context) ([]DeliveryReceivable, error) {
 	var models []receivableModel
 	if err := repository.db.WithContext(ctx).Table("dbo.delivery_receivables AS r").
-		Select("r.delivery_receivable_id, r.company_account_id, a.company_name, r.invoice_number, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version").
+		Select(receivableSelect).
 		Joins("INNER JOIN dbo.company_accounts AS a ON a.company_account_id = r.company_account_id").
 		Order("r.due_date_utc, r.delivery_receivable_id").
 		Find(&models).Error; err != nil {
@@ -88,7 +88,7 @@ func (repository *GormRepository) ListFiltered(ctx context.Context, query ListQu
 		}
 	}
 	var models []receivableModel
-	if err := base.Select("r.delivery_receivable_id, r.company_account_id, a.company_name, r.invoice_number, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version").Order("r.due_date_utc, r.delivery_receivable_id").Limit(query.PageSize).Find(&models).Error; err != nil {
+	if err := base.Select(receivableSelect).Order("r.due_date_utc, r.delivery_receivable_id").Limit(query.PageSize).Find(&models).Error; err != nil {
 		return nil, 0, fmt.Errorf("list filtered receivables: %w", err)
 	}
 	result := make([]DeliveryReceivable, 0, len(models))
@@ -163,6 +163,11 @@ func (repository *GormRepository) Update(ctx context.Context, db *gorm.DB, recei
 			"payment_term_days":    receivable.PaymentTermDays,
 			"due_date_utc":         receivable.DueDateUTC,
 			"amount_due_scaled":    receivable.AmountDue.Int64(),
+			"gross_amount_scaled":  receivable.GrossAmount.Int64(),
+			"tax_rule_code":        nullableRule(receivable.TaxRuleCode),
+			"ewt_amount_scaled":    receivable.EWTAmount.Int64(),
+			"tax_base_scaled":      receivable.TaxBase.Int64(),
+			"vat_amount_scaled":    receivable.VATAmount.Int64(),
 			"updated_at_utc":       gorm.Expr("SYSUTCDATETIME()"),
 		})
 	if result.Error != nil {
@@ -174,12 +179,27 @@ func (repository *GormRepository) Update(ctx context.Context, db *gorm.DB, recei
 	return repository.FindByID(ctx, db, receivable.ID)
 }
 
+const receivableSelect = "r.delivery_receivable_id, r.company_account_id, a.company_name, r.invoice_number, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.gross_amount_scaled, r.tax_rule_code, r.ewt_amount_scaled, r.tax_base_scaled, r.vat_amount_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version"
+
 func (repository *GormRepository) MarkPaymentReceived(ctx context.Context, db *gorm.DB, id int64, paymentDate time.Time, originalVersion []byte) (DeliveryReceivable, error) {
 	result := db.WithContext(ctx).Model(&receivableModel{}).
 		Where("delivery_receivable_id = ? AND row_version = ? AND lifecycle_status = ? AND payment_date_utc IS NULL", id, originalVersion, "Active").
 		Updates(map[string]interface{}{"payment_date_utc": paymentDate, "updated_at_utc": gorm.Expr("SYSUTCDATETIME()")})
 	if result.Error != nil {
 		return DeliveryReceivable{}, fmt.Errorf("mark payment received: %w", result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return DeliveryReceivable{}, ErrConflict
+	}
+	return repository.FindByID(ctx, db, id)
+}
+
+func (repository *GormRepository) ReversePaymentAcknowledgement(ctx context.Context, db *gorm.DB, id int64, originalVersion []byte) (DeliveryReceivable, error) {
+	result := db.WithContext(ctx).Model(&receivableModel{}).
+		Where("delivery_receivable_id = ? AND row_version = ? AND lifecycle_status = ? AND payment_date_utc IS NOT NULL", id, originalVersion, "Active").
+		Updates(map[string]interface{}{"payment_date_utc": nil, "updated_at_utc": gorm.Expr("SYSUTCDATETIME()")})
+	if result.Error != nil {
+		return DeliveryReceivable{}, fmt.Errorf("reverse payment acknowledgement: %w", result.Error)
 	}
 	if result.RowsAffected != 1 {
 		return DeliveryReceivable{}, ErrConflict

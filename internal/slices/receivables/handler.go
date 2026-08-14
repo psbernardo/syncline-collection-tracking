@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/psbernardo/syncline-collection-tracking/internal/shared/businessdate"
+	"github.com/psbernardo/syncline-collection-tracking/internal/shared/money"
+	"github.com/psbernardo/syncline-collection-tracking/internal/shared/tax"
 	webtemplates "github.com/psbernardo/syncline-collection-tracking/internal/web/templates"
 )
 
@@ -52,9 +54,10 @@ type formPage struct {
 }
 
 type detailPage struct {
-	Title      string
-	ActiveNav  string
-	Receivable ReceivableViewModel
+	Title              string
+	ActiveNav          string
+	Receivable         ReceivableViewModel
+	ReversePaymentForm ReversePaymentFormViewModel
 }
 
 type paymentPage struct {
@@ -130,12 +133,31 @@ func NewHandler(service *service) (*Handler, error) {
 func (handler *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /receivables", handler.list)
 	mux.HandleFunc("GET /receivables/new", handler.newForm)
+	mux.HandleFunc("GET /receivables/tax-preview", handler.taxPreview)
 	mux.HandleFunc("POST /receivables", handler.create)
 	mux.HandleFunc("GET /receivables/{id}", handler.detail)
 	mux.HandleFunc("GET /receivables/{id}/payment", handler.payment)
 	mux.HandleFunc("GET /receivables/{id}/edit", handler.editForm)
 	mux.HandleFunc("POST /receivables/{id}", handler.update)
 	mux.HandleFunc("POST /receivables/{id}/payment", handler.receivePayment)
+	mux.HandleFunc("POST /receivables/{id}/payment-acknowledgement/reverse", handler.reversePaymentAcknowledgement)
+}
+
+func (handler *Handler) taxPreview(w http.ResponseWriter, r *http.Request) {
+	amountInput := r.URL.Query().Get("amount")
+	code := tax.RuleCode(r.URL.Query().Get("tax_rule_code"))
+	preview := taxPreview(amountInput, code)
+	if code != tax.RuleNone {
+		if _, err := money.Parse(amountInput); err != nil {
+			preview.Error = "Enter a valid amount."
+		} else if preview.Error == "" && !preview.Visible {
+			preview.Error = "Select a valid tax rule."
+		}
+	}
+	if preview.Error != "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	}
+	handler.render(w, handler.formTemplate, "receivable-tax-preview", preview)
 }
 
 func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -244,7 +266,7 @@ func (handler *Handler) newForm(w http.ResponseWriter, r *http.Request) {
 		handler.serverError(w, err)
 		return
 	}
-	form := ReceivableFormViewModel{Mode: "create", Action: "/receivables", SubmitLabel: "Save receivable", PageTitle: "New delivery receivable", Accounts: accounts, IdempotencyKey: key}
+	form := ReceivableFormViewModel{Mode: "create", Action: "/receivables", SubmitLabel: "Save receivable", PageTitle: "New delivery receivable", Accounts: accounts, TaxRules: tax.RuleOptions(), IdempotencyKey: key}
 	handler.render(w, handler.formTemplate, "layout", formPage{Title: "New delivery receivable", ActiveNav: "receivables", Form: form})
 }
 
@@ -257,6 +279,7 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 	term, _ := strconv.Atoi(r.FormValue("payment_term_days"))
 	command := CreateReceivableCommand{
 		CompanyAccountID: companyID, InvoiceNumber: r.FormValue("invoice_number"), PONumber: r.FormValue("po_number"), AmountInput: r.FormValue("amount"),
+		TaxRuleCode:  tax.RuleCode(r.FormValue("tax_rule_code")),
 		DeliveryDate: r.FormValue("delivery_date"), PaymentTermDays: term, RequestID: requestID(r),
 		IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin",
 	}
@@ -278,7 +301,7 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 				handler.serverError(w, listErr)
 				return
 			}
-			form := ReceivableFormViewModel{Mode: "create", Action: "/receivables", SubmitLabel: "Save receivable", PageTitle: "New delivery receivable", Values: command, Errors: validation, Accounts: accounts, IdempotencyKey: command.IdempotencyKey}
+			form := ReceivableFormViewModel{Mode: "create", Action: "/receivables", SubmitLabel: "Save receivable", PageTitle: "New delivery receivable", Values: command, Errors: validation, Accounts: accounts, TaxRules: tax.RuleOptions(), IdempotencyKey: command.IdempotencyKey, TaxPreview: taxPreview(command.AmountInput, command.TaxRuleCode)}
 			if isHTMX(r) {
 				if errors.Is(err, ErrDuplicatePO) {
 					w.Header().Set("X-Feedback-Message", "PO number is already used by a non-cancelled receivable.")
@@ -334,11 +357,17 @@ func (handler *Handler) editForm(w http.ResponseWriter, r *http.Request) {
 		handler.serverError(w, err)
 		return
 	}
+	grossAmount := receivable.GrossAmount
+	if grossAmount == 0 && receivable.AmountDue != 0 {
+		grossAmount = receivable.AmountDue
+	}
 	form := ReceivableFormViewModel{
 		Mode: "edit", Action: "/receivables/" + strconv.FormatInt(id, 10), SubmitLabel: "Save changes", PageTitle: "Edit delivery receivable",
 		ReceivableID: id, RowVersion: base64.RawURLEncoding.EncodeToString(receivable.RowVersion), Accounts: accounts,
-		Values:         CreateReceivableCommand{CompanyAccountID: receivable.CompanyAccountID, InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber, AmountInput: receivable.AmountDue.Format(), DeliveryDate: businessdate.FormatUTC(receivable.DeliveryDateUTC), PaymentTermDays: receivable.PaymentTermDays},
+		Values:         CreateReceivableCommand{CompanyAccountID: receivable.CompanyAccountID, InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber, AmountInput: grossAmount.Format(), TaxRuleCode: receivable.TaxRuleCode, DeliveryDate: businessdate.FormatUTC(receivable.DeliveryDateUTC), PaymentTermDays: receivable.PaymentTermDays},
+		TaxRules:       tax.RuleOptions(),
 		IdempotencyKey: key,
+		TaxPreview:     taxPreview(grossAmount.Format(), receivable.TaxRuleCode),
 	}
 	handler.render(w, handler.formTemplate, "layout", formPage{Title: form.PageTitle, ActiveNav: "receivables", Form: form})
 }
@@ -360,7 +389,7 @@ func (handler *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	companyID, _ := strconv.ParseInt(r.FormValue("company_account_id"), 10, 64)
 	term, _ := strconv.Atoi(r.FormValue("payment_term_days"))
-	command := UpdateReceivableCommand{ID: id, CompanyAccountID: companyID, InvoiceNumber: r.FormValue("invoice_number"), PONumber: r.FormValue("po_number"), AmountInput: r.FormValue("amount"), DeliveryDate: r.FormValue("delivery_date"), PaymentTermDays: term, OriginalVersion: version, RequestID: requestID(r), IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin"}
+	command := UpdateReceivableCommand{ID: id, CompanyAccountID: companyID, InvoiceNumber: r.FormValue("invoice_number"), PONumber: r.FormValue("po_number"), AmountInput: r.FormValue("amount"), TaxRuleCode: tax.RuleCode(r.FormValue("tax_rule_code")), DeliveryDate: r.FormValue("delivery_date"), PaymentTermDays: term, OriginalVersion: version, RequestID: requestID(r), IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin"}
 	if _, err := handler.service.Update(r.Context(), command); err != nil {
 		var validation ValidationErrors
 		if errors.As(err, &validation) || errors.Is(err, ErrCompanyNotFound) || errors.Is(err, ErrDuplicatePO) || errors.Is(err, ErrDuplicateInvoiceNumber) {
@@ -403,7 +432,7 @@ func (handler *Handler) renderUpdateValidation(w http.ResponseWriter, r *http.Re
 		handler.serverError(w, err)
 		return
 	}
-	form := ReceivableFormViewModel{Mode: "edit", Action: "/receivables/" + strconv.FormatInt(command.ID, 10), SubmitLabel: "Save changes", PageTitle: "Edit delivery receivable", ReceivableID: command.ID, RowVersion: base64.RawURLEncoding.EncodeToString(version), Values: CreateReceivableCommand{CompanyAccountID: command.CompanyAccountID, InvoiceNumber: command.InvoiceNumber, PONumber: command.PONumber, AmountInput: command.AmountInput, DeliveryDate: command.DeliveryDate, PaymentTermDays: command.PaymentTermDays}, Errors: validation, Accounts: accounts, IdempotencyKey: command.IdempotencyKey}
+	form := ReceivableFormViewModel{Mode: "edit", Action: "/receivables/" + strconv.FormatInt(command.ID, 10), SubmitLabel: "Save changes", PageTitle: "Edit delivery receivable", ReceivableID: command.ID, RowVersion: base64.RawURLEncoding.EncodeToString(version), Values: CreateReceivableCommand{CompanyAccountID: command.CompanyAccountID, InvoiceNumber: command.InvoiceNumber, PONumber: command.PONumber, AmountInput: command.AmountInput, TaxRuleCode: command.TaxRuleCode, DeliveryDate: command.DeliveryDate, PaymentTermDays: command.PaymentTermDays}, Errors: validation, Accounts: accounts, TaxRules: tax.RuleOptions(), IdempotencyKey: command.IdempotencyKey, TaxPreview: taxPreview(command.AmountInput, command.TaxRuleCode)}
 	if isHTMX(r) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		handler.render(w, handler.formTemplate, "receivable-form", form)
@@ -428,7 +457,85 @@ func (handler *Handler) detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := detailPage{Title: "Receivable detail", ActiveNav: "receivables", Receivable: receivable}
+	if receivable.CanReversePayment {
+		key, keyErr := NewIdempotencyKey()
+		if keyErr != nil {
+			handler.serverError(w, keyErr)
+			return
+		}
+		view.ReversePaymentForm = ReversePaymentFormViewModel{
+			Action:       "/receivables/" + strconv.FormatInt(id, 10) + "/payment-acknowledgement/reverse",
+			ReceivableID: id, InvoiceNumber: receivable.InvoiceNumber, PaymentDate: receivable.PaymentDate,
+			RowVersion: receivable.RowVersion, IdempotencyKey: key,
+		}
+	}
 	handler.render(w, handler.detailTemplate, "layout", view)
+}
+
+func (handler *Handler) reversePaymentAcknowledgement(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id < 1 {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		handler.serverError(w, err)
+		return
+	}
+	version, err := base64.RawURLEncoding.DecodeString(r.FormValue("row_version"))
+	if err != nil {
+		http.Error(w, "Invalid reversal version", http.StatusBadRequest)
+		return
+	}
+	command := ReversePaymentAcknowledgementCommand{
+		ID: id, Reason: r.FormValue("reason"), OriginalVersion: version,
+		RequestID: requestID(r), IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin",
+	}
+	if _, err := handler.service.ReversePaymentAcknowledgement(r.Context(), command); err != nil {
+		var validation ValidationErrors
+		if errors.As(err, &validation) {
+			entity, getErr := handler.service.Get(r.Context(), id)
+			if getErr != nil {
+				handler.serverError(w, getErr)
+				return
+			}
+			form := handler.reversePaymentForm(entity, command, validation)
+			if isHTMX(r) {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				handler.render(w, handler.detailTemplate, "reverse-payment-form", form)
+				return
+			}
+			view := detailPage{Title: "Receivable detail", ActiveNav: "receivables", Receivable: entity, ReversePaymentForm: form}
+			handler.render(w, handler.detailTemplate, "layout", view)
+			return
+		}
+		if errors.Is(err, ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		if errors.Is(err, ErrConflict) || errors.Is(err, ErrPaymentAcknowledgementNotReversible) || errors.Is(err, ErrIdempotencyConflict) {
+			w.Header().Set("X-Feedback-Message", "This payment acknowledgement cannot be reversed because the receivable has changed state. Reload and try again.")
+			http.Error(w, "This payment acknowledgement cannot be reversed. Reload and try again.", http.StatusConflict)
+			return
+		}
+		handler.serverError(w, err)
+		return
+	}
+	if isHTMX(r) {
+		w.Header().Set("HX-Redirect", "/receivables/"+strconv.FormatInt(id, 10))
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Redirect(w, r, "/receivables/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+}
+
+func (handler *Handler) reversePaymentForm(entity ReceivableViewModel, command ReversePaymentAcknowledgementCommand, validation ValidationErrors) ReversePaymentFormViewModel {
+	return ReversePaymentFormViewModel{
+		Action:       "/receivables/" + strconv.FormatInt(command.ID, 10) + "/payment-acknowledgement/reverse",
+		ReceivableID: command.ID, InvoiceNumber: entity.InvoiceNumber, PaymentDate: entity.PaymentDate,
+		RowVersion: base64.RawURLEncoding.EncodeToString(command.OriginalVersion), Reason: command.Reason,
+		IdempotencyKey: command.IdempotencyKey, Open: true, Errors: validation,
+	}
 }
 
 func (handler *Handler) payment(w http.ResponseWriter, r *http.Request) {
@@ -457,7 +564,7 @@ func (handler *Handler) payment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := paymentPage{Title: "Acknowledge payment", ActiveNav: "receivables", Receivable: receivable,
-		PaymentForm: PaymentFormViewModel{Action: "/receivables/" + strconv.FormatInt(id, 10) + "/payment", ReceivableID: id, PaymentDate: businessdate.FormatUTC(handler.service.now()), AmountDisplay: receivable.AmountDisplay, RowVersion: receivable.RowVersion, IdempotencyKey: key}}
+		PaymentForm: PaymentFormViewModel{Action: "/receivables/" + strconv.FormatInt(id, 10) + "/payment", ReceivableID: id, PaymentDate: businessdate.FormatUTC(handler.service.now()), AmountDisplay: receivable.AmountDisplay, TaxRuleLabel: receivable.TaxRuleLabel, RowVersion: receivable.RowVersion, IdempotencyKey: key}}
 	handler.render(w, handler.paymentTemplate, "layout", view)
 }
 
@@ -487,6 +594,7 @@ func (handler *Handler) receivePayment(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			form.AmountDisplay = entity.AmountDisplay
+			form.TaxRuleLabel = entity.TaxRuleLabel
 			if isHTMX(r) {
 				w.WriteHeader(http.StatusUnprocessableEntity)
 				handler.render(w, handler.paymentTemplate, "payment-form", form)

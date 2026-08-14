@@ -9,7 +9,7 @@ Add server-side filters to the delivery receivables list for:
 - PO number
 - Multiple classification/status values
 
-The filter flow must follow `analysis/vertical-slice-coding-standard.md` and use Go, GORM, SQL Server, `html/template`, HTMX, and Alpine.js presentation-only behavior.
+The filter flow must follow `analysis/004-vertical-slice-coding-standard.md` and use Go, GORM, SQL Server, `html/template`, HTMX, and Alpine.js presentation-only behavior.
 
 The existing receivable slice already implements the company, PO, and status filters. This plan extends that flow with an invoice-number filter. No database migration is required because `invoice_number` is already persisted by migration `0004`.
 
@@ -284,4 +284,4 @@ No changes are expected in `internal/migrations`, `receivableModel`, or `Deliver
 - Cursor pagination and remaining count remain correct after filtering.
 - Unit, repository, HTTP, and template tests pass.
 - `go test ./...`, `go vet ./...`, and formatting pass.
-- `analysis/progress.md` is updated.
+- `analysis/028-progress.md` is updated.

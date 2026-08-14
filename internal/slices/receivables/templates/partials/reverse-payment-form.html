@@ -1,0 +1,9 @@
+{{ define "reverse-payment-form" }}
+<form id="reverse-payment-form" method="post" action="{{ .Action }}" hx-post="{{ .Action }}" hx-target="#reverse-payment-form" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']">
+  <input type="hidden" name="idempotency_key" value="{{ .IdempotencyKey }}">
+  <input type="hidden" name="row_version" value="{{ .RowVersion }}">
+  <p class="modal-detail">Payment received date: <strong>{{ .PaymentDate }}</strong></p>
+  <div class="field"><label for="reversal_reason">Reason for reversal</label><textarea id="reversal_reason" name="reason" rows="3" maxlength="500" aria-describedby="reversal-reason-help reversal-reason-error" x-ref="reversalReason" required>{{ .Reason }}</textarea><p id="reversal-reason-help" class="field-help">Explain why this payment acknowledgement was recorded incorrectly.</p><p id="reversal-reason-error" class="error" aria-live="polite">{{ .Errors.Reason }}</p></div>
+  <div class="modal-actions"><button class="button" type="button" @click="reverseOpen = false">Cancel</button><button class="button button-danger" type="submit">Reverse acknowledgement</button></div>
+</form>
+{{ end }}

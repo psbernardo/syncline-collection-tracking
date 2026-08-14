@@ -8,7 +8,7 @@ The component must allow users to add and remove values while preserving normal
 HTML form submission. The first integration target is the receivables status
 filter, which currently uses repeated status checkboxes.
 
-The implementation must follow `analysis/vertical-slice-coding-standard.md`
+The implementation must follow `analysis/004-vertical-slice-coding-standard.md`
 and use Go `html/template`, HTMX, and Alpine.js only for local presentation
 state.
 
@@ -260,7 +260,7 @@ Manual browser checks:
 - Desktop and mobile layouts are usable.
 - Template and HTTP tests pass.
 - `go test ./...`, `go vet ./...`, and formatting pass.
-- `analysis/progress.md` is updated.
+- `analysis/028-progress.md` is updated.
 
 ## 8. Implementation Decision Gate
 
