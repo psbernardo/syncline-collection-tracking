@@ -4,7 +4,7 @@
 
 Implement the first business vertical slice for creating and managing company accounts.
 
-The slice must follow `analysis/vertical-slice-coding-standard.md` and use:
+The slice must follow `analysis/004-vertical-slice-coding-standard.md` and use:
 
 - Go vertical slice architecture
 - GORM and SQL Server
@@ -76,7 +76,7 @@ internal/slices/accounts/
 
 ### A. Confirm database contract
 
-1. Verify `dbo.company_accounts` columns match `analysis/database-schema.md`.
+1. Verify `dbo.company_accounts` columns match `analysis/006-database-schema.md`.
 2. Confirm required fields are non-null.
 3. Confirm primary key and account indexes exist.
 4. Confirm `created_at_utc` and `updated_at_utc` defaults.

@@ -247,4 +247,4 @@ Alpine.js:
 - Alpine.js remains presentation-only.
 - Unit, repository, service, HTTP, and template tests pass.
 - `go test ./...`, `go vet ./...`, and formatting pass.
-- `analysis/progress.md` is updated.
+- `analysis/028-progress.md` is updated.

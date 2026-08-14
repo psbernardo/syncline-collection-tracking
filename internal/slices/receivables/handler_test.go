@@ -29,8 +29,67 @@ func TestNewReceivableFormRendersAccounts(t *testing.T) {
 	if !strings.Contains(recorder.Body.String(), `name="invoice_number"`) {
 		t.Fatal("invoice number field was not rendered")
 	}
+	for _, expected := range []string{`id="receivable-tax-preview"`, `hx-get="/receivables/tax-preview"`, `hx-trigger="input changed delay:300ms, change"`, `hx-include="#tax_rule_code"`, `hx-include="#amount"`} {
+		if !strings.Contains(recorder.Body.String(), expected) {
+			t.Fatalf("receivable form does not contain %q", expected)
+		}
+	}
 	if !strings.Contains(recorder.Body.String(), "Company accounts") || !strings.Contains(recorder.Body.String(), "Receivables") {
 		t.Fatal("shared navigation was not rendered")
+	}
+}
+
+func TestReceivableTaxPreviewRendersDetailedBreakdown(t *testing.T) {
+	handler, err := NewHandler(NewService(nil, &fakeReceivableRepository{}, &fakeAccountRepository{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/receivables/tax-preview?amount=2800.00&tax_rule_code=vat_inclusive_ewt_1", nil)
+	handler.taxPreview(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	for _, expected := range []string{"Tax computation", "₱2,800.00", "₱2,500.00", "₱300.00", "₱25.00", "₱2,775.00"} {
+		if !strings.Contains(recorder.Body.String(), expected) {
+			t.Fatalf("preview does not contain %q", expected)
+		}
+	}
+}
+
+func TestReceivableTaxPreviewClearsWhenNoRuleIsSelected(t *testing.T) {
+	handler, err := NewHandler(NewService(nil, &fakeReceivableRepository{}, &fakeAccountRepository{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/receivables/tax-preview?amount=2800.00", nil)
+	handler.taxPreview(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if strings.Contains(recorder.Body.String(), "Tax computation") || strings.Contains(recorder.Body.String(), "₱2,800.00") {
+		t.Fatal("empty tax rule preview rendered stale computation")
+	}
+}
+
+func TestReceivableTaxPreviewRejectsInvalidInput(t *testing.T) {
+	handler, err := NewHandler(NewService(nil, &fakeReceivableRepository{}, &fakeAccountRepository{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []string{
+		"amount=not-a-number&tax_rule_code=vat_inclusive_ewt_1",
+		"amount=2800.00&tax_rule_code=unknown",
+	} {
+		recorder := httptest.NewRecorder()
+		handler.taxPreview(recorder, httptest.NewRequest(http.MethodGet, "/receivables/tax-preview?"+query, nil))
+		if recorder.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("query %q status = %d, want %d", query, recorder.Code, http.StatusUnprocessableEntity)
+		}
+		if strings.Contains(recorder.Body.String(), "Net payable") {
+			t.Fatalf("query %q rendered a monetary result", query)
+		}
 	}
 }
 
@@ -221,6 +280,29 @@ func TestReceivableDetailRendersProfessionalSummaryAndActions(t *testing.T) {
 			t.Fatalf("detail does not contain %q", expected)
 		}
 	}
+	if strings.Contains(body, "Reverse payment acknowledgement") {
+		t.Fatal("unpaid detail should not show the reversal action")
+	}
+}
+
+func TestPaidReceivableDetailRendersReversalDialog(t *testing.T) {
+	handler, err := NewHandler(NewService(nil, &paidReceivableRepository{}, &fakeAccountRepository{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/receivables/1", nil)
+	request.SetPathValue("id", "1")
+	handler.detail(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	body := recorder.Body.String()
+	for _, expected := range []string{"Reverse payment acknowledgement", "This is not a refund", `role="dialog"`, `name="reason"`, `name="row_version"`, `name="idempotency_key"`} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("paid detail does not contain %q", expected)
+		}
+	}
 }
 
 type fakeAccountRepository struct{}
@@ -277,6 +359,10 @@ func (*loadMoreReceivableRepository) MarkPaymentReceived(context.Context, *gorm.
 	return DeliveryReceivable{}, nil
 }
 
+func (*loadMoreReceivableRepository) ReversePaymentAcknowledgement(context.Context, *gorm.DB, int64, []byte) (DeliveryReceivable, error) {
+	return DeliveryReceivable{}, nil
+}
+
 func (*loadMoreReceivableRepository) FindBlockingPONumber(context.Context, *gorm.DB, string, int64) (bool, error) {
 	return false, nil
 }
@@ -293,7 +379,18 @@ func (*fakeReceivableRepository) MarkPaymentReceived(context.Context, *gorm.DB, 
 	return DeliveryReceivable{}, nil
 }
 
+func (*fakeReceivableRepository) ReversePaymentAcknowledgement(context.Context, *gorm.DB, int64, []byte) (DeliveryReceivable, error) {
+	return DeliveryReceivable{}, nil
+}
+
 type paymentReceivableRepository struct{}
+
+type paidReceivableRepository struct{ paymentReceivableRepository }
+
+func (*paidReceivableRepository) FindByID(context.Context, *gorm.DB, int64) (DeliveryReceivable, error) {
+	paidDate := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	return DeliveryReceivable{ID: 1, CompanyAccountID: 1, CompanyName: "Acme Corp", InvoiceNumber: "INV001", PONumber: "PO001", DeliveryDateUTC: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), PaymentTermDays: 5, DueDateUTC: time.Date(2026, 8, 14, 0, 0, 0, 0, time.UTC), AmountDue: 100, PaymentDateUTC: &paidDate, LifecycleStatus: "Active", RowVersion: []byte("version")}, nil
+}
 
 func (*paymentReceivableRepository) Create(context.Context, *gorm.DB, DeliveryReceivable) (DeliveryReceivable, error) {
 	return DeliveryReceivable{}, nil
@@ -316,6 +413,10 @@ func (*paymentReceivableRepository) Update(context.Context, *gorm.DB, DeliveryRe
 }
 
 func (*paymentReceivableRepository) MarkPaymentReceived(context.Context, *gorm.DB, int64, time.Time, []byte) (DeliveryReceivable, error) {
+	return DeliveryReceivable{}, nil
+}
+
+func (*paymentReceivableRepository) ReversePaymentAcknowledgement(context.Context, *gorm.DB, int64, []byte) (DeliveryReceivable, error) {
 	return DeliveryReceivable{}, nil
 }
 

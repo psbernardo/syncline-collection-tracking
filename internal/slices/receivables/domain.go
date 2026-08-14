@@ -5,21 +5,25 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/psbernardo/syncline-collection-tracking/internal/shared/businessdate"
 	"github.com/psbernardo/syncline-collection-tracking/internal/shared/money"
+	"github.com/psbernardo/syncline-collection-tracking/internal/shared/tax"
 )
 
 var (
-	ErrNotFound               = errors.New("delivery receivable not found")
-	ErrCompanyNotFound        = errors.New("company account not found")
-	ErrConflict               = errors.New("delivery receivable was changed by another request")
-	ErrProtected              = errors.New("delivery receivable cannot be edited in its current state")
-	ErrDuplicatePO            = errors.New("PO number is already used by a non-cancelled receivable")
-	ErrDuplicateInvoiceNumber = errors.New("invoice number is already used by a non-cancelled receivable")
-	ErrIdempotencyConflict    = errors.New("idempotency key was already used with a different request")
-	ErrAlreadyPaid            = errors.New("delivery receivable has already been paid")
-	ErrPaymentNotAllowed      = errors.New("payment cannot be recorded for this receivable")
+	ErrNotFound                            = errors.New("delivery receivable not found")
+	ErrCompanyNotFound                     = errors.New("company account not found")
+	ErrConflict                            = errors.New("delivery receivable was changed by another request")
+	ErrProtected                           = errors.New("delivery receivable cannot be edited in its current state")
+	ErrDuplicatePO                         = errors.New("PO number is already used by a non-cancelled receivable")
+	ErrDuplicateInvoiceNumber              = errors.New("invoice number is already used by a non-cancelled receivable")
+	ErrIdempotencyConflict                 = errors.New("idempotency key was already used with a different request")
+	ErrAlreadyPaid                         = errors.New("delivery receivable has already been paid")
+	ErrPaymentNotAllowed                   = errors.New("payment cannot be recorded for this receivable")
+	ErrPaymentAcknowledgementNotReversible = errors.New("payment acknowledgement cannot be reversed for this receivable")
+	ErrInvalidReversalReason               = errors.New("a reason is required to reverse the payment acknowledgement")
 )
 
 type ValidationErrors map[string]string
@@ -48,6 +52,11 @@ type DeliveryReceivable struct {
 	PaymentTermDays    int
 	DueDateUTC         time.Time
 	AmountDue          money.Amount
+	GrossAmount        money.Amount
+	TaxRuleCode        tax.RuleCode
+	EWTAmount          money.Amount
+	TaxBase            money.Amount
+	VATAmount          money.Amount
 	PaymentDateUTC     *time.Time
 	LifecycleStatus    string
 	CreatedAtUTC       time.Time
@@ -56,6 +65,10 @@ type DeliveryReceivable struct {
 }
 
 func NewDeliveryReceivable(companyID int64, invoiceNumber, poNumber, amountInput, deliveryInput string, termDays int) (DeliveryReceivable, error) {
+	return NewDeliveryReceivableWithTax(companyID, invoiceNumber, poNumber, amountInput, deliveryInput, termDays, tax.RuleNone)
+}
+
+func NewDeliveryReceivableWithTax(companyID int64, invoiceNumber, poNumber, amountInput, deliveryInput string, termDays int, taxRule tax.RuleCode) (DeliveryReceivable, error) {
 	errors := ValidationErrors{}
 	if companyID < 1 {
 		errors["CompanyAccountID"] = "Select a company."
@@ -75,6 +88,10 @@ func NewDeliveryReceivable(companyID int64, invoiceNumber, poNumber, amountInput
 	amount, err := money.Parse(amountInput)
 	if err != nil {
 		errors["Amount"] = "Enter a valid non-negative amount."
+	}
+	breakdown, taxErr := tax.CalculateRule(amount, taxRule)
+	if taxErr != nil {
+		errors["TaxRuleCode"] = "Select a valid tax rule."
 	}
 	deliveryDate, err := businessdate.Parse(strings.TrimSpace(deliveryInput))
 	if err != nil {
@@ -98,7 +115,12 @@ func NewDeliveryReceivable(companyID int64, invoiceNumber, poNumber, amountInput
 		DeliveryDateUTC:    deliveryDate,
 		PaymentTermDays:    termDays,
 		DueDateUTC:         dueDate,
-		AmountDue:          amount,
+		AmountDue:          breakdown.NetAmount,
+		GrossAmount:        breakdown.GrossAmount,
+		TaxRuleCode:        taxRule,
+		EWTAmount:          breakdown.WithholdingAmount,
+		TaxBase:            breakdown.TaxBase,
+		VATAmount:          breakdown.VATAmount,
 		LifecycleStatus:    "Active",
 	}, nil
 }
@@ -165,6 +187,14 @@ func ValidatePaymentDate(receivable DeliveryReceivable, input string, now time.T
 		return time.Time{}, validation
 	}
 	return paymentDate, nil
+}
+
+func ValidateReversalReason(input string) (string, error) {
+	reason := strings.TrimSpace(input)
+	if reason == "" || utf8.RuneCountInString(reason) > 500 {
+		return "", ValidationErrors{"Reason": "Enter a reason of 1-500 characters."}
+	}
+	return reason, nil
 }
 
 func isAlphaNumeric(value string) bool {

@@ -116,7 +116,7 @@ Before the application is exposed beyond the local machine:
 4. Keep `cmd/migrate` argument-free; its default action is to apply pending migrations.
 5. Keep the existing versioned migration registry, transaction-owned lock, rollback, constraints, and indexes.
 6. Run `go run ./cmd/migrate` after SQL Server is listening on the configured endpoint.
-7. Record the migration result in `analysis/progress.md`.
+7. Record the migration result in `analysis/028-progress.md`.
 
 ## 8. Approval Questions
 

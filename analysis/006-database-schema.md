@@ -1,6 +1,6 @@
 # Database Schema and Index Plan
 
-This document defines the first SQL Server schema and index contract for migration `0001`. It is derived from `analysis/plan.md` and `analysis/technical-plan.md`.
+This document defines the first SQL Server schema and index contract for migration `0001`. It is derived from `analysis/knowledge-base/001-business-domain.md` and `analysis/002-technical-plan.md`.
 
 ## 1. SQL Script Standards
 

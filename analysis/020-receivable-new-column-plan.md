@@ -56,7 +56,7 @@ Use this path when the new column is a relabeling, layout change, or presentatio
 
 Use this path when the value is stored on `dbo.delivery_receivables`:
 
-1. Record the approved field contract in `analysis/database-schema.md` and the delivery receivable mapping in `analysis/technical-plan.md`.
+1. Record the approved field contract in `analysis/006-database-schema.md` and the delivery receivable mapping in `analysis/002-technical-plan.md`.
 2. Add `schema_0004.go` with an explicit `up0004` and `down0004`, then register it in `internal/migrations/migrations.go`.
 3. Use an explicit SQL Server type, nullability, default/backfill rule, constraint, and index only if an approved query requires one.
 4. Update `receivableModel`, `DeliveryReceivable`, conversion functions, and all explicit `SELECT` projections.
@@ -164,16 +164,16 @@ For a new database column:
 - No financial calculation is duplicated in templates or Alpine.js.
 - Existing receivable data is preserved and migration backfill is verified.
 - `go test ./...`, `go vet ./...`, and `gofmt` pass.
-- `analysis/progress.md` records the implementation and migration verification status.
+- `analysis/028-progress.md` records the implementation and migration verification status.
 
 ## 7. Documentation Updates
 
 This plan is the initial documentation update. After the field is approved, update only the applicable documents:
 
-- `analysis/database-schema.md`: persisted column, constraints, indexes, and verification queries.
-- `analysis/technical-plan.md`: delivery receivable domain mapping and data contract.
-- `analysis/vertical-slice-coding-standard.md`: only if the new field establishes a reusable page or data rule.
-- `analysis/progress.md`: plan status, implementation status, migration version, and verification result.
+- `analysis/006-database-schema.md`: persisted column, constraints, indexes, and verification queries.
+- `analysis/002-technical-plan.md`: delivery receivable domain mapping and data contract.
+- `analysis/004-vertical-slice-coding-standard.md`: only if the new field establishes a reusable page or data rule.
+- `analysis/028-progress.md`: plan status, implementation status, migration version, and verification result.
 - `README.md`: only if migration or runtime instructions change.
 
 ## 8. Migration Behavior

@@ -19,6 +19,7 @@ import (
 type Config struct {
 	Host     string `env:"HOST" envDefault:"localhost"`
 	Port     int    `env:"PORT" envDefault:"1433"`
+	HTTPPort int    `env:"HTTP_PORT" envDefault:"8080"`
 	Username string `env:"USER" envDefault:"dev"`
 	Password string `env:"PASSWORD" envDefault:"trustno1"`
 	Database string `env:"DATABASE" envDefault:"CTS_DEV"`

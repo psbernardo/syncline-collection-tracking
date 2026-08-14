@@ -60,7 +60,7 @@ func run() error {
 	})
 
 	server := &http.Server{
-		Addr:              "0.0.0.0:8080",
+		Addr:              fmt.Sprintf("0.0.0.0:%d", cfg.HTTPPort),
 		Handler:           requestTimeouts(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

@@ -212,4 +212,4 @@ Do not expose raw database constraint messages to the user.
 - Dismissed snackbars are removed from the DOM.
 - Accessibility attributes and keyboard dismissal work.
 - Tests pass with `go test ./...`, `go vet ./...`, and formatting.
-- `analysis/progress.md` is updated.
+- `analysis/028-progress.md` is updated.

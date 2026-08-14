@@ -10,7 +10,7 @@ Create one shared responsive navigation bar that lets the owner move between:
 - New company account
 - New delivery receivable
 
-The navigation must follow `analysis/vertical-slice-coding-standard.md` and work with Go `html/template`, HTMX, Alpine.js, and the local Tailwind asset plan.
+The navigation must follow `analysis/004-vertical-slice-coding-standard.md` and work with Go `html/template`, HTMX, Alpine.js, and the local Tailwind asset plan.
 
 ## 2. Scope
 
@@ -189,7 +189,7 @@ Use the Tailwind/Windmill visual language:
 - Navigation is keyboard accessible and responsive.
 - Template and HTTP tests pass.
 - `go test ./...`, `go vet ./...`, and formatting pass.
-- `analysis/progress.md` is updated.
+- `analysis/028-progress.md` is updated.
 
 ## 9. Next Task
 

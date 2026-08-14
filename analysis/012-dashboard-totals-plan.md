@@ -4,7 +4,7 @@
 
 Implement the first dashboard read slice that shows the owner accurate collection totals without opening individual receivables.
 
-The dashboard must follow `analysis/vertical-slice-coding-standard.md` and reuse the existing receivable classification rules.
+The dashboard must follow `analysis/004-vertical-slice-coding-standard.md` and reuse the existing receivable classification rules.
 
 ## 2. Dashboard Metrics
 

@@ -5,7 +5,7 @@
     <span class="payment-card-mark" aria-hidden="true">✓</span>
   </div>
   <div class="payment-amount-block"><span class="eyebrow">Amount to mark as paid</span><strong class="payment-amount">{{ .AmountDisplay }}</strong><span class="payment-currency">PHP</span></div>
-  <div class="payment-notice"><strong>Full payment only</strong><p>This action marks the entire receivable as paid. Partial payments are not supported.</p></div>
+  <div class="payment-notice"><strong>Full payment only</strong><p>This action marks the entire receivable as paid. Partial payments are not supported.</p>{{ if .TaxRuleLabel }}<p>Tax was calculated when the receivable was created or edited and will not be deducted again.</p>{{ end }}</div>
   <form id="payment-form" method="post" action="{{ .Action }}" hx-post="{{ .Action }}" hx-target="#payment-form" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']">
     <input type="hidden" name="idempotency_key" value="{{ .IdempotencyKey }}">
     <input type="hidden" name="row_version" value="{{ .RowVersion }}">

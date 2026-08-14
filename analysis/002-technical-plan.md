@@ -4,7 +4,7 @@
 
 This document defines the technical architecture, project structure, development workflow, environment strategy, migration strategy, and testing standards for the collection tracking system.
 
-The business domain is defined in [`analysis/plan.md`](./plan.md). This document does not change those business decisions. If a technical choice exposes a business ambiguity, record the question in Section 18 and resolve it before implementation.
+The business domain is defined in [`analysis/knowledge-base/001-business-domain.md`](./knowledge-base/001-business-domain.md). This document does not change those business decisions. If a technical choice exposes a business ambiguity, record the question in Section 18 and resolve it before implementation.
 
 ## 2. Confirmed Technical Direction
 
@@ -330,9 +330,9 @@ Recommended responsibilities:
 
 `delivery_receivables` should retain the term and calculated due date used at creation. Client account edits must not recalculate historical receivables.
 
-Detailed table and index definitions for migration `0001` are documented in [`analysis/database-schema.md`](./database-schema.md).
+Detailed table and index definitions for migration `0001` are documented in [`analysis/006-database-schema.md`](./006-database-schema.md).
 
-The no-argument migration configuration and `.env` loading plan is documented in [`analysis/migration-implementation-plan.md`](./migration-implementation-plan.md).
+The no-argument migration configuration and `.env` loading plan is documented in [`analysis/007-migration-implementation-plan.md`](./007-migration-implementation-plan.md).
 
 Initial persistence contract:
 
@@ -614,7 +614,7 @@ Audit events are append-only through the application. The application must expos
 
 ## 17. Development Workflow
 
-1. Confirm or update the business rule in `analysis/plan.md`.
+1. Confirm or update the business rule in `analysis/knowledge-base/001-business-domain.md`.
 2. Select one vertical slice and write its domain or command/query test first.
 3. Implement the smallest passing behavior.
 4. Add repository tests with `sqlmock` for persistence behavior.

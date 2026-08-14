@@ -4,7 +4,7 @@
 
 Add the edit workflow to the existing company-account vertical slice without creating a second feature architecture.
 
-The edit workflow must follow `analysis/vertical-slice-coding-standard.md` and reuse the existing account form, repository, audit, idempotency, HTMX, Alpine.js, and test patterns.
+The edit workflow must follow `analysis/004-vertical-slice-coding-standard.md` and reuse the existing account form, repository, audit, idempotency, HTMX, Alpine.js, and test patterns.
 
 ## 2. Scope
 

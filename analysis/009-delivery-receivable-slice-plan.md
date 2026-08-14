@@ -4,7 +4,7 @@
 
 Implement the vertical slice for recording money owed after a client delivery.
 
-The slice must follow `analysis/vertical-slice-coding-standard.md` and use:
+The slice must follow `analysis/004-vertical-slice-coding-standard.md` and use:
 
 - Go vertical slice architecture
 - GORM and SQL Server
@@ -84,7 +84,7 @@ internal/slices/receivables/
 
 ### A. Confirm database contract
 
-1. Verify `dbo.delivery_receivables` matches `analysis/database-schema.md`.
+1. Verify `dbo.delivery_receivables` matches `analysis/006-database-schema.md`.
 2. Confirm the company foreign key exists.
 3. Confirm payment term check constraint `1-120`.
 4. Confirm non-negative scaled amount constraint.

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/psbernardo/syncline-collection-tracking/internal/shared/businessdate"
+	"github.com/psbernardo/syncline-collection-tracking/internal/shared/tax"
 	"github.com/psbernardo/syncline-collection-tracking/internal/slices/accounts"
 	"gorm.io/gorm"
 )
@@ -26,6 +27,7 @@ type CreateReceivableCommand struct {
 	InvoiceNumber    string
 	PONumber         string
 	AmountInput      string
+	TaxRuleCode      tax.RuleCode
 	DeliveryDate     string
 	PaymentTermDays  int
 	RequestID        string
@@ -39,6 +41,7 @@ type UpdateReceivableCommand struct {
 	InvoiceNumber    string
 	PONumber         string
 	AmountInput      string
+	TaxRuleCode      tax.RuleCode
 	DeliveryDate     string
 	PaymentTermDays  int
 	OriginalVersion  []byte
@@ -50,6 +53,15 @@ type UpdateReceivableCommand struct {
 type ReceivePaymentCommand struct {
 	ID              int64
 	PaymentDate     string
+	OriginalVersion []byte
+	RequestID       string
+	IdempotencyKey  string
+	ActorID         string
+}
+
+type ReversePaymentAcknowledgementCommand struct {
+	ID              int64
+	Reason          string
 	OriginalVersion []byte
 	RequestID       string
 	IdempotencyKey  string
@@ -68,7 +80,7 @@ func NewService(db *gorm.DB, repo Repository, accountRepo AccountRepository) *se
 }
 
 func (service *service) Create(ctx context.Context, command CreateReceivableCommand) (DeliveryReceivable, error) {
-	receivable, err := NewDeliveryReceivable(command.CompanyAccountID, command.InvoiceNumber, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays)
+	receivable, err := NewDeliveryReceivableWithTax(command.CompanyAccountID, command.InvoiceNumber, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays, command.TaxRuleCode)
 	if err != nil {
 		return DeliveryReceivable{}, err
 	}
@@ -144,7 +156,7 @@ func (service *service) Create(ctx context.Context, command CreateReceivableComm
 }
 
 func (service *service) Update(ctx context.Context, command UpdateReceivableCommand) (DeliveryReceivable, error) {
-	receivable, err := NewDeliveryReceivable(command.CompanyAccountID, command.InvoiceNumber, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays)
+	receivable, err := NewDeliveryReceivableWithTax(command.CompanyAccountID, command.InvoiceNumber, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays, command.TaxRuleCode)
 	if err != nil {
 		return DeliveryReceivable{}, err
 	}
@@ -295,6 +307,63 @@ func (service *service) ReceivePayment(ctx context.Context, command ReceivePayme
 	return result, nil
 }
 
+func (service *service) ReversePaymentAcknowledgement(ctx context.Context, command ReversePaymentAcknowledgementCommand) (DeliveryReceivable, error) {
+	if command.IdempotencyKey == "" {
+		return DeliveryReceivable{}, fmt.Errorf("idempotency key is required")
+	}
+	reason, err := ValidateReversalReason(command.Reason)
+	if err != nil {
+		return DeliveryReceivable{}, err
+	}
+	payloadHash := hashReversePaymentPayload(command.ID, reason)
+	var result DeliveryReceivable
+	err = service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing idempotencyModel
+		findErr := tx.Where("idempotency_key = ?", command.IdempotencyKey).First(&existing).Error
+		if findErr == nil {
+			if existing.RequestHash != payloadHash {
+				return ErrIdempotencyConflict
+			}
+			if existing.ResultEntityID == nil {
+				return fmt.Errorf("idempotency request has no result")
+			}
+			result, err = service.repo.FindByID(ctx, tx, *existing.ResultEntityID)
+			return err
+		}
+		if !errors.Is(findErr, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("check idempotency key: %w", findErr)
+		}
+		previous, err := service.repo.FindByID(ctx, tx, command.ID)
+		if err != nil {
+			return err
+		}
+		if previous.LifecycleStatus != "Active" || previous.PaymentDateUTC == nil {
+			return ErrPaymentAcknowledgementNotReversible
+		}
+		idempotency := idempotencyModel{Key: command.IdempotencyKey, CommandType: "reverse_payment_acknowledgement", RequestHash: payloadHash, ResponseCode: 303, CreatedAtUTC: service.now(), ExpiresAtUTC: service.now().Add(24 * time.Hour)}
+		if err := tx.Create(&idempotency).Error; err != nil {
+			return fmt.Errorf("create idempotency record: %w", err)
+		}
+		result, err = service.repo.ReversePaymentAcknowledgement(ctx, tx, command.ID, command.OriginalVersion)
+		if err != nil {
+			return err
+		}
+		if err := tx.Model(&idempotency).Updates(map[string]interface{}{"result_entity_id": result.ID}).Error; err != nil {
+			return fmt.Errorf("save idempotency result: %w", err)
+		}
+		before, _ := json.Marshal(previous)
+		after, _ := json.Marshal(result)
+		if err := tx.Create(&auditModel{EntityType: "delivery_receivable", EntityID: result.ID, Action: "payment_acknowledgement_reversed", ActorID: command.ActorID, OccurredAtUTC: service.now(), RequestID: command.RequestID, IdempotencyKey: command.IdempotencyKey, PreviousValues: string(before), NewValues: string(after), Note: reason}).Error; err != nil {
+			return fmt.Errorf("create audit event: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return DeliveryReceivable{}, err
+	}
+	return result, nil
+}
+
 func (service *service) Accounts(ctx context.Context) ([]AccountOption, error) {
 	accountsList, err := service.accounts.List(ctx)
 	if err != nil {
@@ -361,6 +430,15 @@ func hashPaymentPayload(id int64, paymentDate time.Time) string {
 	return hex.EncodeToString(hash[:])
 }
 
+func hashReversePaymentPayload(id int64, reason string) string {
+	payload, _ := json.Marshal(struct {
+		ID     int64  `json:"id"`
+		Reason string `json:"reason"`
+	}{ID: id, Reason: reason})
+	hash := sha256.Sum256(payload)
+	return hex.EncodeToString(hash[:])
+}
+
 func isDuplicatePOError(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "ux_delivery_receivables_po_not_cancelled")
 }
@@ -400,6 +478,7 @@ type auditModel struct {
 	IdempotencyKey string    `gorm:"column:idempotency_key"`
 	PreviousValues string    `gorm:"column:previous_values_json"`
 	NewValues      string    `gorm:"column:new_values_json"`
+	Note           string    `gorm:"column:note"`
 }
 
 func (auditModel) TableName() string { return "dbo.audit_events" }

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/psbernardo/syncline-collection-tracking/internal/shared/businessdate"
+	"github.com/psbernardo/syncline-collection-tracking/internal/shared/money"
+	"github.com/psbernardo/syncline-collection-tracking/internal/shared/tax"
 )
 
 type ListQuery struct {
@@ -121,6 +123,12 @@ type ReceivableViewModel struct {
 	InvoiceNumber      string
 	PONumber           string
 	AmountDisplay      string
+	GrossAmountDisplay string
+	TaxBaseDisplay     string
+	VATDisplay         string
+	EWTDisplay         string
+	NetPayableDisplay  string
+	TaxRuleLabel       string
 	DeliveryDate       string
 	DueDate            string
 	PaymentTermDays    int
@@ -131,6 +139,7 @@ type ReceivableViewModel struct {
 	DaysOverdue        int
 	DaysUntilDue       int
 	CanReceivePayment  bool
+	CanReversePayment  bool
 	CanEdit            bool
 	RowVersion         string
 }
@@ -150,7 +159,41 @@ type ReceivableFormViewModel struct {
 	Values         CreateReceivableCommand
 	Errors         ValidationErrors
 	Accounts       []AccountOption
+	TaxRules       []tax.RuleOption
 	IdempotencyKey string
+	TaxPreview     TaxPreviewViewModel
+}
+
+type TaxPreviewViewModel struct {
+	Visible            bool
+	GrossAmountDisplay string
+	TaxBaseDisplay     string
+	VATDisplay         string
+	EWTDisplay         string
+	NetPayableDisplay  string
+	Error              string
+}
+
+func taxPreview(amountInput string, code tax.RuleCode) TaxPreviewViewModel {
+	if code == tax.RuleNone {
+		return TaxPreviewViewModel{}
+	}
+	amount, err := money.Parse(amountInput)
+	if err != nil {
+		return TaxPreviewViewModel{}
+	}
+	breakdown, err := tax.CalculateRule(amount, code)
+	if err != nil {
+		return TaxPreviewViewModel{Error: "Enter a valid amount and tax rule."}
+	}
+	return TaxPreviewViewModel{
+		Visible:            true,
+		GrossAmountDisplay: breakdown.GrossAmount.FormatPHP(),
+		TaxBaseDisplay:     breakdown.TaxBase.FormatPHP(),
+		VATDisplay:         breakdown.VATAmount.FormatPHP(),
+		EWTDisplay:         breakdown.WithholdingAmount.FormatPHP(),
+		NetPayableDisplay:  breakdown.NetAmount.FormatPHP(),
+	}
 }
 
 type PaymentFormViewModel struct {
@@ -158,8 +201,21 @@ type PaymentFormViewModel struct {
 	ReceivableID   int64
 	PaymentDate    string
 	AmountDisplay  string
+	TaxRuleLabel   string
 	RowVersion     string
 	IdempotencyKey string
+	Errors         ValidationErrors
+}
+
+type ReversePaymentFormViewModel struct {
+	Action         string
+	ReceivableID   int64
+	InvoiceNumber  string
+	PaymentDate    string
+	RowVersion     string
+	Reason         string
+	IdempotencyKey string
+	Open           bool
 	Errors         ValidationErrors
 }
 
@@ -169,13 +225,27 @@ func toViewModel(receivable DeliveryReceivable, now time.Time) ReceivableViewMod
 		ID: receivable.ID, CompanyAccountID: receivable.CompanyAccountID, InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber,
 		CompanyName:   receivable.CompanyName,
 		AmountDisplay: receivable.AmountDue.FormatPHP(), DeliveryDate: businessdate.FormatUTC(receivable.DeliveryDateUTC),
+		GrossAmountDisplay: receivable.GrossAmount.FormatPHP(), TaxBaseDisplay: receivable.TaxBase.FormatPHP(), VATDisplay: receivable.VATAmount.FormatPHP(), EWTDisplay: receivable.EWTAmount.FormatPHP(), NetPayableDisplay: receivable.AmountDue.FormatPHP(), TaxRuleLabel: taxRuleLabel(receivable.TaxRuleCode),
 		DueDate: businessdate.FormatUTC(receivable.DueDateUTC), PaymentTermDays: receivable.PaymentTermDays,
 		PaymentDate: paymentDateDisplay(receivable.PaymentDateUTC), LifecycleStatus: receivable.LifecycleStatus, Classification: string(classification),
 		ClassificationTone: classificationTone(classification), CanReceivePayment: receivable.LifecycleStatus == "Active" && receivable.PaymentDateUTC == nil,
-		CanEdit:     receivable.LifecycleStatus == "Active" && receivable.PaymentDateUTC == nil,
-		RowVersion:  base64.RawURLEncoding.EncodeToString(receivable.RowVersion),
-		DaysOverdue: receivable.DaysOverdueAt(now), DaysUntilDue: receivable.DaysUntilDueAt(now),
+		CanReversePayment: receivable.LifecycleStatus == "Active" && receivable.PaymentDateUTC != nil,
+		CanEdit:           receivable.LifecycleStatus == "Active" && receivable.PaymentDateUTC == nil,
+		RowVersion:        base64.RawURLEncoding.EncodeToString(receivable.RowVersion),
+		DaysOverdue:       receivable.DaysOverdueAt(now), DaysUntilDue: receivable.DaysUntilDueAt(now),
 	}
+}
+
+func taxRuleLabel(code tax.RuleCode) string {
+	if code == tax.RuleNone {
+		return ""
+	}
+	for _, option := range tax.RuleOptions() {
+		if option.Code == code {
+			return option.Label
+		}
+	}
+	return ""
 }
 
 func paymentDateDisplay(value *time.Time) string {

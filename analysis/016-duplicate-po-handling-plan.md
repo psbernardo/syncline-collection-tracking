@@ -139,7 +139,7 @@ The query must:
 ### F. Update templates and HTMX responses
 
 - Show `PO number already exists on an active receivable.` beside the PO input.
-- Also show the duplicate error through the reusable snackbar defined in `analysis/feedback-snackbar-plan.md`.
+- Also show the duplicate error through the reusable snackbar defined in `analysis/017-feedback-snackbar-plan.md`.
 - Preserve the submitted form values.
 - Return HTTP `422` with the form fragment for HTMX validation failures.
 - Return the full form for normal requests.
