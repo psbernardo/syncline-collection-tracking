@@ -10,6 +10,7 @@ type accountModel struct {
 	BillingAddress  string    `gorm:"column:billing_address"`
 	DeliveryAddress string    `gorm:"column:delivery_address"`
 	ContactNumber   string    `gorm:"column:contact_number"`
+	Email           string    `gorm:"column:email"`
 	CreatedAtUTC    time.Time `gorm:"column:created_at_utc"`
 	UpdatedAtUTC    time.Time `gorm:"column:updated_at_utc"`
 	RowVersion      []byte    `gorm:"column:row_version;->"`
@@ -26,6 +27,7 @@ func toModel(account CompanyAccount) accountModel {
 		BillingAddress:  account.BillingAddress,
 		DeliveryAddress: account.DeliveryAddress,
 		ContactNumber:   account.ContactNumber,
+		Email:           account.Email,
 		CreatedAtUTC:    account.CreatedAtUTC,
 		UpdatedAtUTC:    account.UpdatedAtUTC,
 		RowVersion:      account.RowVersion,
@@ -41,6 +43,7 @@ func (model accountModel) toDomain() CompanyAccount {
 		BillingAddress:  model.BillingAddress,
 		DeliveryAddress: model.DeliveryAddress,
 		ContactNumber:   model.ContactNumber,
+		Email:           model.Email,
 		CreatedAtUTC:    model.CreatedAtUTC,
 		UpdatedAtUTC:    model.UpdatedAtUTC,
 		RowVersion:      model.RowVersion,

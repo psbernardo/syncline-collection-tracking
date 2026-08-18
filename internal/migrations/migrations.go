@@ -21,6 +21,17 @@ var registry = []Migration{
 	{Version: 4, Name: "add required receivable invoice number", Up: up0004, Down: down0004},
 	{Version: 5, Name: "enforce non-cancelled invoice uniqueness", Up: up0005, Down: down0005},
 	{Version: 6, Name: "add receivable tax rule amounts", Up: up0006, Down: down0006},
+	{Version: 7, Name: "create trading master data", Up: up0007, Down: down0007},
+	{Version: 8, Name: "create quotation pricing", Up: up0008, Down: down0008},
+	{Version: 9, Name: "add generated quotation number sequence", Up: up0009, Down: down0009},
+	{Version: 10, Name: "enforce shared transaction UOM values", Up: up0010, Down: down0010},
+	{Version: 11, Name: "add quotation validity and terms constraints", Up: up0011, Down: down0011},
+	{Version: 12, Name: "replace quotation terms with controlled days", Up: up0012, Down: down0012},
+	{Version: 13, Name: "store quotation withholding tax", Up: up0013, Down: down0013},
+	{Version: 14, Name: "add company account email", Up: up0014, Down: down0014},
+	{Version: 15, Name: "create sales orders", Up: up0015, Down: down0015},
+	{Version: 16, Name: "add quotation profitability costs", Up: up0016, Down: down0016},
+	{Version: 17, Name: "update shared UOM values", Up: up0017, Down: down0017},
 }
 
 func Status(ctx context.Context, db *gorm.DB) error {

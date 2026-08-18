@@ -6,6 +6,7 @@
   {{ template "field" dict "id" "contact_person" "label" "Contact person" "name" "ContactPerson" "value" .Values.ContactPerson "error" .Errors.ContactPerson }}
   {{ template "field" dict "id" "tin_number" "label" "TIN number" "name" "TINNumber" "value" .Values.TINNumber "error" .Errors.TINNumber }}
   {{ template "field" dict "id" "contact_number" "label" "Contact number" "name" "ContactNumber" "value" .Values.ContactNumber "error" .Errors.ContactNumber }}
+  {{ template "field" dict "id" "email" "label" "Email" "name" "Email" "value" .Values.Email "error" .Errors.Email }}
   {{ template "textarea" dict "id" "billing_address" "label" "Billing address" "name" "BillingAddress" "value" .Values.BillingAddress "error" .Errors.BillingAddress }}
   {{ template "textarea" dict "id" "delivery_address" "label" "Delivery address" "name" "DeliveryAddress" "value" .Values.DeliveryAddress "error" .Errors.DeliveryAddress }}
   <div class="form-actions"><a class="button" href="/accounts">Cancel</a><button class="button button-primary" type="submit">{{ .SubmitLabel }}</button></div>

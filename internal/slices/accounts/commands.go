@@ -22,6 +22,7 @@ type CreateAccountCommand struct {
 	BillingAddress  string
 	DeliveryAddress string
 	ContactNumber   string
+	Email           string
 	RequestID       string
 	IdempotencyKey  string
 	ActorID         string
@@ -35,6 +36,7 @@ type UpdateAccountCommand struct {
 	BillingAddress  string
 	DeliveryAddress string
 	ContactNumber   string
+	Email           string
 	OriginalVersion []byte
 	RequestID       string
 	IdempotencyKey  string
@@ -59,6 +61,7 @@ func (service *commandService) Create(ctx context.Context, command CreateAccount
 		BillingAddress:  command.BillingAddress,
 		DeliveryAddress: command.DeliveryAddress,
 		ContactNumber:   command.ContactNumber,
+		Email:           command.Email,
 	})
 	if err != nil {
 		return CompanyAccount{}, err
@@ -142,6 +145,7 @@ func (service *commandService) Update(ctx context.Context, command UpdateAccount
 		BillingAddress:  command.BillingAddress,
 		DeliveryAddress: command.DeliveryAddress,
 		ContactNumber:   command.ContactNumber,
+		Email:           command.Email,
 		RowVersion:      command.OriginalVersion,
 	})
 	if err != nil {

@@ -25,7 +25,7 @@ func (repository *GormRepository) Create(ctx context.Context, db *gorm.DB, accou
 func (repository *GormRepository) List(ctx context.Context) ([]CompanyAccount, error) {
 	var models []accountModel
 	if err := repository.db.WithContext(ctx).
-		Select("company_account_id, company_name, contact_person, tin_number, billing_address, delivery_address, contact_number, created_at_utc, updated_at_utc, row_version").
+		Select("company_account_id, company_name, contact_person, tin_number, billing_address, delivery_address, contact_number, email, created_at_utc, updated_at_utc, row_version").
 		Order("company_name, company_account_id").
 		Find(&models).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -75,6 +75,7 @@ func (repository *GormRepository) Update(ctx context.Context, db *gorm.DB, accou
 			"billing_address":  account.BillingAddress,
 			"delivery_address": account.DeliveryAddress,
 			"contact_number":   account.ContactNumber,
+			"email":            account.Email,
 			"updated_at_utc":   gorm.Expr("SYSUTCDATETIME()"),
 		})
 	if result.Error != nil {
