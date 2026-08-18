@@ -141,13 +141,16 @@ func TestQuotationFormUsesSearchableRelationshipSelectors(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.newPage(w, httptest.NewRequest("GET", "/quotations/new", nil))
 	body := w.Body.String()
-	for _, expected := range []string{"QT-00000001", "Search customer...", "ACME - Widget (PC)", "Long widget description", "Quoted items", "quotation-row-template", "class=\"product-cell\" colspan=\"2\""} {
+	for _, expected := range []string{"QT-00000001", "Search customer...", "ACME - Widget (PC)", "Long widget description", "Quoted items", "quotation-row-template", "class=\"product-cell\" colspan=\"2\"", "quotation-line-profitability", "Cost &amp; profit", "data-field=\"supplier-cost\"", "quotation-grid-value"} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("quotation form does not contain %q", expected)
 		}
 	}
 	if strings.Contains(body, ">Description</th>") || strings.Contains(body, "data-field=\"description\"") {
 		t.Fatal("quotation form still contains a separate description column")
+	}
+	if strings.Contains(body, "class=\"cost-column\"") || strings.Contains(body, ">Profit / margin</th>") {
+		t.Fatal("quotation form still renders cost or profit as grid columns")
 	}
 }
 

@@ -261,9 +261,19 @@ func (h *Handler) prepareForm(ctx context.Context, page formPage) (formPage, err
 		if err != nil {
 			return page, err
 		}
-		page.ProductOptions = options
+		page.ProductOptions = quotationProductOptions(options)
 	}
 	return page, nil
+}
+
+func quotationProductOptions(options []webtemplates.SearchableSelectOption) []webtemplates.SearchableSelectOption {
+	result := make([]webtemplates.SearchableSelectOption, len(options))
+	copy(result, options)
+	for index := range result {
+		suffix := " (" + result[index].UOM + ")"
+		result[index].Label = strings.TrimSuffix(result[index].Label, suffix)
+	}
+	return result
 }
 
 func templateDict(values ...any) (map[string]any, error) {
