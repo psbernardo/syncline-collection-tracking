@@ -81,6 +81,12 @@ func NewHandler(service *service) (*Handler, error) {
 			result[key] = values[index+1]
 		}
 		return result, nil
+	}, "accountSelect": func(accounts []AccountOption, selected int64) webtemplates.SearchableSelectViewModel {
+		options := make([]webtemplates.SearchableSelectOption, 0, len(accounts))
+		for _, account := range accounts {
+			options = append(options, webtemplates.SearchableSelectOption{Value: strconv.FormatInt(account.ID, 10), Label: account.CompanyName, Search: account.CompanyName})
+		}
+		return webtemplates.SearchableSelectViewModel{ID: "receivable-company-select", Name: "company_account_id", Label: "Company", Placeholder: "Search company...", Options: options, Selected: strconv.FormatInt(selected, 10)}
 	}, "hasStatus": func(statuses []string, value string) bool {
 		for _, status := range statuses {
 			if status == value {

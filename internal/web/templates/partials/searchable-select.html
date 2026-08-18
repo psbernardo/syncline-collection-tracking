@@ -1,0 +1,19 @@
+{{ define "searchable-select" }}
+<div id="{{ .ID }}" class="searchable-select" x-cloak x-data="searchableSelect()" x-init="initialize()" data-selected="{{ .Selected }}">
+  <label class="searchable-select-label" for="{{ .ID }}-input">{{ .Label }}</label>
+  <input id="{{ .ID }}-value" type="hidden" x-bind:name="'{{ .Name }}'" value="{{ .Selected }}">
+  <div class="searchable-select-control">
+   <input id="{{ .ID }}-input" class="searchable-select-input" type="search" placeholder="{{ .Placeholder }}" autocomplete="off" role="combobox" aria-autocomplete="list" :aria-expanded="open.toString()" aria-controls="{{ .ID }}-options" @focus="open = true; $nextTick(() => positionOptions())" @input="query = $event.target.value; open = true; $nextTick(() => positionOptions())" @keydown="inputKeydown($event)">
+    <button type="button" class="searchable-select-clear" x-show="selected" @click="clear(); $root.querySelector('.searchable-select-input').focus()" aria-label="Clear {{ .Label }}">&times;</button>
+  </div>
+  <div id="{{ .ID }}-options" class="searchable-select-options" x-show="open" @click.outside="close" role="listbox" aria-labelledby="{{ .ID }}-input">
+    {{ range .Options }}
+      <button type="button" class="searchable-select-option" data-value="{{ .Value }}" data-label="{{ .Label }}" data-description="{{ .Description }}" data-search="{{ .Search }}" data-uom="{{ .UOM }}" data-disabled="{{ .Disabled }}" role="option" x-show="isVisible($el.dataset.value)" @click="select($event.currentTarget.dataset.value)" @keydown="optionKeydown($event)" :class="{ 'is-selected': selected === $el.dataset.value }" :disabled="$el.dataset.disabled === 'true'">
+      <span>{{ .Label }}</span><span class="searchable-select-check" x-show="selected === $el.dataset.value" aria-hidden="true">&#10003;</span>
+    </button>
+    {{ end }}
+    <p class="searchable-select-empty" x-show="filteredOptions().length === 0">No matching options.</p>
+  </div>
+</div>
+<noscript><label class="searchable-select-label" for="{{ .ID }}-fallback">{{ .Label }}</label><select id="{{ .ID }}-fallback" name="{{ .Name }}"><option value="">{{ .Placeholder }}</option>{{ range .Options }}<option value="{{ .Value }}"{{ if eq .Value $.Selected }} selected{{ end }}{{ if .Disabled }} disabled{{ end }}>{{ .Label }}</option>{{ end }}</select></noscript>
+{{ end }}

@@ -18,6 +18,7 @@ type RuleCode string
 
 const (
 	RuleNone             RuleCode = ""
+	RuleVATInclusive12   RuleCode = "vat_inclusive_12"
 	RuleVATInclusiveEWT1 RuleCode = "vat_inclusive_ewt_1"
 )
 
@@ -32,12 +33,15 @@ var (
 )
 
 func RuleOptions() []RuleOption {
-	return []RuleOption{{Code: RuleVATInclusiveEWT1, Label: "VAT-inclusive, 1% EWT"}}
+	return []RuleOption{{Code: RuleVATInclusive12, Label: "VAT-inclusive, 12% VAT"}, {Code: RuleVATInclusiveEWT1, Label: "VAT-inclusive, 1% EWT"}}
 }
 
 func CalculateRule(gross money.Amount, code RuleCode) (Breakdown, error) {
 	if code == RuleNone {
 		return Breakdown{GrossAmount: gross, TaxBase: gross, NetAmount: gross, VATRate: Rate{Denominator: 1}, WithholdingRate: Rate{Denominator: 1}}, nil
+	}
+	if code == RuleVATInclusive12 {
+		return CalculateVATInclusive(gross, VAT12, Rate{Denominator: 1})
 	}
 	if code != RuleVATInclusiveEWT1 {
 		return Breakdown{}, fmt.Errorf("unknown tax rule %q", code)

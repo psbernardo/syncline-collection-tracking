@@ -131,6 +131,7 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 		BillingAddress:  r.FormValue("billing_address"),
 		DeliveryAddress: r.FormValue("delivery_address"),
 		ContactNumber:   r.FormValue("contact_number"),
+		Email:           r.FormValue("email"),
 		RequestID:       requestID(r),
 		IdempotencyKey:  r.FormValue("idempotency_key"),
 		ActorID:         "local-admin",
@@ -146,6 +147,7 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 					BillingAddress:  command.BillingAddress,
 					DeliveryAddress: command.DeliveryAddress,
 					ContactNumber:   command.ContactNumber,
+					Email:           command.Email,
 				},
 				Errors:         validation,
 				IdempotencyKey: command.IdempotencyKey,
@@ -156,6 +158,7 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 					CompanyName: command.CompanyName, ContactPerson: command.ContactPerson,
 					TINNumber: command.TINNumber, BillingAddress: command.BillingAddress,
 					DeliveryAddress: command.DeliveryAddress, ContactNumber: command.ContactNumber,
+					Email: command.Email,
 				}
 				form.Errors = validation
 			}
@@ -198,6 +201,7 @@ func (handler *Handler) update(w http.ResponseWriter, r *http.Request) {
 		ID: id, CompanyName: r.FormValue("company_name"), ContactPerson: r.FormValue("contact_person"),
 		TINNumber: r.FormValue("tin_number"), BillingAddress: r.FormValue("billing_address"),
 		DeliveryAddress: r.FormValue("delivery_address"), ContactNumber: r.FormValue("contact_number"),
+		Email:           r.FormValue("email"),
 		OriginalVersion: version, RequestID: requestID(r), IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin",
 	}
 	updated, err := handler.service.Update(r.Context(), command)
@@ -231,7 +235,7 @@ func (handler *Handler) renderUpdateValidation(w http.ResponseWriter, r *http.Re
 	form := AccountFormViewModel{
 		Mode: "edit", Action: "/accounts/" + strconv.FormatInt(command.ID, 10), SubmitLabel: "Save changes",
 		PageTitle: "Edit company account", AccountID: command.ID,
-		Values: CompanyAccount{ID: command.ID, CompanyName: command.CompanyName, ContactPerson: command.ContactPerson, TINNumber: command.TINNumber, BillingAddress: command.BillingAddress, DeliveryAddress: command.DeliveryAddress, ContactNumber: command.ContactNumber},
+		Values: CompanyAccount{ID: command.ID, CompanyName: command.CompanyName, ContactPerson: command.ContactPerson, TINNumber: command.TINNumber, BillingAddress: command.BillingAddress, DeliveryAddress: command.DeliveryAddress, ContactNumber: command.ContactNumber, Email: command.Email},
 		Errors: validation, IdempotencyKey: command.IdempotencyKey, RowVersion: base64.RawURLEncoding.EncodeToString(version),
 	}
 	if isHTMX(r) {

@@ -42,6 +42,16 @@ This is the canonical implementation tracker for the project. The three-digit fi
 | 025 | Planned | Receivable tax preview | [`025-receivable-tax-preview-plan.md`](./025-receivable-tax-preview-plan.md); current tax work is uncommitted | High |
 | 026 | Planned | VAT calculation | [`026-vat-tax-calculation-plan.md`](./026-vat-tax-calculation-plan.md); current tax work is uncommitted | High |
 | 027 | Planned | Payment acknowledgement tax rule | [`027-acknowledge-payment-tax-rule-plan.md`](./027-acknowledge-payment-tax-rule-plan.md); current tax work is uncommitted | High |
+| 029 | Planned | Trading MVP ladder and scope | [`029-trading-mvp-ladder.md`](./029-trading-mvp-ladder.md); dependency-ordered MVP plan | High |
+| 030 | Planned | Trading foundation and cross-slice contract | [`030-trading-foundation-plan.md`](./030-trading-foundation-plan.md); decisions, snapshots, and receivable handoff boundary | High |
+| 031 | Partial | Product, supplier, and supplier-price master data | [`031-trading-master-data-plan.md`](./031-trading-master-data-plan.md); `internal/slices/products`, `internal/slices/suppliers`, migration `0007`, route/UI tests, `go test -count=1 ./...`, and `go vet ./...` pass; live migration verification is blocked by SQL Server authentication for `CTS_DEV` | High |
+| 032 | Planned | RFQ, quotation, tax, and commission pricing | [`032-rfq-quotation-pricing-plan.md`](./032-rfq-quotation-pricing-plan.md); no `rfqs`/`quotations` slices, migration, or implementation evidence exists | High |
+| 033 | Planned | Customer PO and Sales Order conversion | [`033-sales-order-plan.md`](./033-sales-order-plan.md); final commercial transaction plan | High |
+| 034 | Planned | Multi-supplier procurement and allocation | [`034-procurement-allocation-plan.md`](./034-procurement-allocation-plan.md); supplier PO and split-allocation plan | High |
+| 035 | Planned | Full receiving and invoice creation | [`035-receiving-invoice-plan.md`](./035-receiving-invoice-plan.md); fulfillment and invoice plan | High |
+| 036 | Planned | Invoice-to-receivable collection handoff | [`036-receivable-handoff-plan.md`](./036-receivable-handoff-plan.md); integration with existing receivables | High |
+| 037 | Planned | Trading MVP reporting, hardening, and release | [`037-trading-mvp-release-plan.md`](./037-trading-mvp-release-plan.md); final verification plan | High |
+| 038 | Partial | Supplier-product searchable selectors | [`038-supplier-product-searchable-dropdown-plan.md`](./038-supplier-product-searchable-dropdown-plan.md); searchable single-select UI, active option loading, strict ID validation, and relationship edit identity rules exist; browser verification remains | High |
 
 ## Current State
 
@@ -49,7 +59,8 @@ This is the canonical implementation tracker for the project. The three-digit fi
 - Sequences `012`, `013`, `016`, and `018` require verification or tracker reconciliation before being called complete.
 - Sequence `024` must not be described as implemented until the current worktree changes are reviewed, tested, and committed.
 - Authentication is required by the technical plan but is not represented by an implementation sequence yet; it is a remaining prerequisite before wider use.
-- Migration `0006` and the tax package are active worktree changes and are intentionally excluded from the completed history.
+- Migrations `0006` and `0007`, the tax package, and trading master-data slices are active worktree changes and are intentionally excluded from the completed history.
+- Verification on 2026-08-16: `go test -count=1 ./...`, `go vet ./...`, migration registry tests, and `GET /health` passed; live migration execution was attempted but blocked by SQL Server login failure for `CTS_DEV`.
 
 ## AI State Contract
 

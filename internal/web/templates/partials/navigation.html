@@ -6,9 +6,15 @@
     <a href="/dashboard" @click="navOpen = false"{{ if eq .ActiveNav "dashboard" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">D</span>Dashboard</a>
     <a href="/accounts" @click="navOpen = false"{{ if eq .ActiveNav "accounts" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">C</span>Company accounts</a>
     <a href="/receivables" @click="navOpen = false"{{ if eq .ActiveNav "receivables" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">R</span>Receivables</a>
+    <a href="/products" @click="navOpen = false"{{ if eq .ActiveNav "products" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">P</span>Products</a>
+    <a href="/suppliers" @click="navOpen = false"{{ if eq .ActiveNav "suppliers" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">S</span>Suppliers</a>
+     <a href="/supplier-products" @click="navOpen = false"{{ if eq .ActiveNav "supplier-products" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">$</span>Supplier products</a>
+     <a href="/quotations" @click="navOpen = false"{{ if eq .ActiveNav "quotations" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">$</span>Quotations</a>
     <p class="nav-section-label">Actions</p>
     <a href="/accounts/new" @click="navOpen = false" class="nav-action">+ New account</a>
     <a href="/receivables/new" @click="navOpen = false" class="nav-action">+ New receivable</a>
+    <a href="/products/new" @click="navOpen = false" class="nav-action">+ New product</a>
+    <a href="/suppliers/new" @click="navOpen = false" class="nav-action">+ New supplier</a>
   </nav>
 </aside>
 <header class="mobile-header"><a class="brand" href="/dashboard">Syncline</a><button class="menu-toggle" type="button" @click="navOpen = !navOpen" :aria-expanded="navOpen.toString()" aria-controls="primary-navigation"><span class="sr-only">Toggle navigation</span>Menu</button></header>

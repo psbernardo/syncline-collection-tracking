@@ -27,6 +27,7 @@ type CompanyAccount struct {
 	BillingAddress  string
 	DeliveryAddress string
 	ContactNumber   string
+	Email           string
 	CreatedAtUTC    time.Time
 	UpdatedAtUTC    time.Time
 	RowVersion      []byte
@@ -44,6 +45,7 @@ func NewCompanyAccount(input CompanyAccount) (CompanyAccount, error) {
 	account.BillingAddress = strings.TrimSpace(account.BillingAddress)
 	account.DeliveryAddress = strings.TrimSpace(account.DeliveryAddress)
 	account.ContactNumber = strings.TrimSpace(account.ContactNumber)
+	account.Email = strings.TrimSpace(account.Email)
 
 	errors := ValidationErrors{}
 	validateRequired(errors, "CompanyName", account.CompanyName, maxNameLength)
@@ -52,6 +54,9 @@ func NewCompanyAccount(input CompanyAccount) (CompanyAccount, error) {
 	validateRequired(errors, "BillingAddress", account.BillingAddress, maxAddressLength)
 	validateRequired(errors, "DeliveryAddress", account.DeliveryAddress, maxAddressLength)
 	validateRequired(errors, "ContactNumber", account.ContactNumber, maxContactLength)
+	if len([]rune(account.Email)) > maxNameLength {
+		errors["Email"] = fmt.Sprintf("Must be %d characters or fewer.", maxNameLength)
+	}
 	if len(errors) > 0 {
 		return CompanyAccount{}, errors
 	}
