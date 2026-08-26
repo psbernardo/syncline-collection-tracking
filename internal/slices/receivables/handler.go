@@ -272,7 +272,12 @@ func (handler *Handler) newForm(w http.ResponseWriter, r *http.Request) {
 		handler.serverError(w, err)
 		return
 	}
-	form := ReceivableFormViewModel{Mode: "create", Action: "/receivables", SubmitLabel: "Save receivable", PageTitle: "New delivery receivable", Accounts: accounts, TaxRules: tax.RuleOptions(), IdempotencyKey: key}
+	invoices, err := handler.service.InvoiceOptions(r.Context(), 0, 0)
+	if err != nil {
+		handler.serverError(w, err)
+		return
+	}
+	form := ReceivableFormViewModel{Mode: "create", Action: "/receivables", SubmitLabel: "Save receivable", PageTitle: "New delivery receivable", Accounts: accounts, Invoices: invoices, TaxRules: tax.RuleOptions(), IdempotencyKey: key}
 	handler.render(w, handler.formTemplate, "layout", formPage{Title: "New delivery receivable", ActiveNav: "receivables", Form: form})
 }
 
@@ -284,22 +289,24 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 	companyID, _ := strconv.ParseInt(r.FormValue("company_account_id"), 10, 64)
 	term, _ := strconv.Atoi(r.FormValue("payment_term_days"))
 	command := CreateReceivableCommand{
-		CompanyAccountID: companyID, InvoiceNumber: r.FormValue("invoice_number"), PONumber: r.FormValue("po_number"), AmountInput: r.FormValue("amount"),
+		CompanyAccountID: companyID, InvoiceID: parseFormID(r.FormValue("invoice_id")), PONumber: r.FormValue("po_number"), AmountInput: r.FormValue("amount"),
 		TaxRuleCode:  tax.RuleCode(r.FormValue("tax_rule_code")),
 		DeliveryDate: r.FormValue("delivery_date"), PaymentTermDays: term, RequestID: requestID(r),
 		IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin",
 	}
 	if _, err := handler.service.Create(r.Context(), command); err != nil {
 		var validation ValidationErrors
-		if errors.As(err, &validation) || errors.Is(err, ErrCompanyNotFound) || errors.Is(err, ErrDuplicatePO) || errors.Is(err, ErrDuplicateInvoiceNumber) {
+		if errors.As(err, &validation) || errors.Is(err, ErrCompanyNotFound) || errors.Is(err, ErrDuplicatePO) || errors.Is(err, ErrDuplicateInvoiceNumber) || errors.Is(err, ErrInvoiceNotFound) || errors.Is(err, ErrInvoiceCompanyMismatch) {
 			if validation == nil {
 				validation = ValidationErrors{}
 				if errors.Is(err, ErrCompanyNotFound) {
 					validation["CompanyAccountID"] = "Select an existing company account."
 				} else if errors.Is(err, ErrDuplicatePO) {
 					validation["PONumber"] = "PO number is already used by a non-cancelled receivable."
-				} else {
+				} else if errors.Is(err, ErrDuplicateInvoiceNumber) {
 					validation["InvoiceNumber"] = "Invoice number is already used by a non-cancelled receivable."
+				} else {
+					validation["InvoiceNumber"] = "Select a valid invoice for this company."
 				}
 			}
 			accounts, listErr := handler.service.Accounts(r.Context())
@@ -307,7 +314,12 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 				handler.serverError(w, listErr)
 				return
 			}
-			form := ReceivableFormViewModel{Mode: "create", Action: "/receivables", SubmitLabel: "Save receivable", PageTitle: "New delivery receivable", Values: command, Errors: validation, Accounts: accounts, TaxRules: tax.RuleOptions(), IdempotencyKey: command.IdempotencyKey, TaxPreview: taxPreview(command.AmountInput, command.TaxRuleCode)}
+			invoices, invoiceErr := handler.service.InvoiceOptions(r.Context(), command.CompanyAccountID, 0)
+			if invoiceErr != nil {
+				handler.serverError(w, invoiceErr)
+				return
+			}
+			form := ReceivableFormViewModel{Mode: "create", Action: "/receivables", SubmitLabel: "Save receivable", PageTitle: "New delivery receivable", Values: command, Errors: validation, Accounts: accounts, Invoices: invoices, TaxRules: tax.RuleOptions(), IdempotencyKey: command.IdempotencyKey, TaxPreview: taxPreview(command.AmountInput, command.TaxRuleCode)}
 			if isHTMX(r) {
 				if errors.Is(err, ErrDuplicatePO) {
 					w.Header().Set("X-Feedback-Message", "PO number is already used by a non-cancelled receivable.")
@@ -358,6 +370,11 @@ func (handler *Handler) editForm(w http.ResponseWriter, r *http.Request) {
 		handler.serverError(w, err)
 		return
 	}
+	invoices, err := handler.service.InvoiceOptions(r.Context(), receivable.CompanyAccountID, id)
+	if err != nil {
+		handler.serverError(w, err)
+		return
+	}
 	key, err := NewIdempotencyKey()
 	if err != nil {
 		handler.serverError(w, err)
@@ -369,8 +386,8 @@ func (handler *Handler) editForm(w http.ResponseWriter, r *http.Request) {
 	}
 	form := ReceivableFormViewModel{
 		Mode: "edit", Action: "/receivables/" + strconv.FormatInt(id, 10), SubmitLabel: "Save changes", PageTitle: "Edit delivery receivable",
-		ReceivableID: id, RowVersion: base64.RawURLEncoding.EncodeToString(receivable.RowVersion), Accounts: accounts,
-		Values:         CreateReceivableCommand{CompanyAccountID: receivable.CompanyAccountID, InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber, AmountInput: grossAmount.Format(), TaxRuleCode: receivable.TaxRuleCode, DeliveryDate: businessdate.FormatUTC(receivable.DeliveryDateUTC), PaymentTermDays: receivable.PaymentTermDays},
+		ReceivableID: id, RowVersion: base64.RawURLEncoding.EncodeToString(receivable.RowVersion), Accounts: accounts, Invoices: invoices,
+		Values:         CreateReceivableCommand{CompanyAccountID: receivable.CompanyAccountID, InvoiceID: receivable.InvoiceID, InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber, AmountInput: grossAmount.Format(), TaxRuleCode: receivable.TaxRuleCode, DeliveryDate: businessdate.FormatUTC(receivable.DeliveryDateUTC), PaymentTermDays: receivable.PaymentTermDays},
 		TaxRules:       tax.RuleOptions(),
 		IdempotencyKey: key,
 		TaxPreview:     taxPreview(grossAmount.Format(), receivable.TaxRuleCode),
@@ -395,20 +412,27 @@ func (handler *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	companyID, _ := strconv.ParseInt(r.FormValue("company_account_id"), 10, 64)
 	term, _ := strconv.Atoi(r.FormValue("payment_term_days"))
-	command := UpdateReceivableCommand{ID: id, CompanyAccountID: companyID, InvoiceNumber: r.FormValue("invoice_number"), PONumber: r.FormValue("po_number"), AmountInput: r.FormValue("amount"), TaxRuleCode: tax.RuleCode(r.FormValue("tax_rule_code")), DeliveryDate: r.FormValue("delivery_date"), PaymentTermDays: term, OriginalVersion: version, RequestID: requestID(r), IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin"}
+	command := UpdateReceivableCommand{ID: id, CompanyAccountID: companyID, InvoiceID: parseFormID(r.FormValue("invoice_id")), PONumber: r.FormValue("po_number"), AmountInput: r.FormValue("amount"), TaxRuleCode: tax.RuleCode(r.FormValue("tax_rule_code")), DeliveryDate: r.FormValue("delivery_date"), PaymentTermDays: term, OriginalVersion: version, RequestID: requestID(r), IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin"}
 	if _, err := handler.service.Update(r.Context(), command); err != nil {
 		var validation ValidationErrors
-		if errors.As(err, &validation) || errors.Is(err, ErrCompanyNotFound) || errors.Is(err, ErrDuplicatePO) || errors.Is(err, ErrDuplicateInvoiceNumber) {
+		if errors.As(err, &validation) || errors.Is(err, ErrCompanyNotFound) || errors.Is(err, ErrDuplicatePO) || errors.Is(err, ErrDuplicateInvoiceNumber) || errors.Is(err, ErrInvoiceNotFound) || errors.Is(err, ErrInvoiceCompanyMismatch) {
 			if validation == nil {
 				validation = ValidationErrors{}
 				if errors.Is(err, ErrCompanyNotFound) {
 					validation["CompanyAccountID"] = "Select an existing company account."
 				} else if errors.Is(err, ErrDuplicatePO) {
 					validation["PONumber"] = "PO number is already used by a non-cancelled receivable."
-				} else {
+				} else if errors.Is(err, ErrDuplicateInvoiceNumber) {
 					validation["InvoiceNumber"] = "Invoice number is already used by a non-cancelled receivable."
+				} else {
+					validation["InvoiceNumber"] = "Select a valid invoice for this company."
 				}
 			}
+			handler.renderUpdateValidation(w, r, command, validation, version)
+			return
+		}
+		if errors.Is(err, ErrInvoiceNotFound) || errors.Is(err, ErrInvoiceCompanyMismatch) {
+			validation := ValidationErrors{"InvoiceNumber": "Select a valid invoice for this company."}
 			handler.renderUpdateValidation(w, r, command, validation, version)
 			return
 		}
@@ -438,7 +462,12 @@ func (handler *Handler) renderUpdateValidation(w http.ResponseWriter, r *http.Re
 		handler.serverError(w, err)
 		return
 	}
-	form := ReceivableFormViewModel{Mode: "edit", Action: "/receivables/" + strconv.FormatInt(command.ID, 10), SubmitLabel: "Save changes", PageTitle: "Edit delivery receivable", ReceivableID: command.ID, RowVersion: base64.RawURLEncoding.EncodeToString(version), Values: CreateReceivableCommand{CompanyAccountID: command.CompanyAccountID, InvoiceNumber: command.InvoiceNumber, PONumber: command.PONumber, AmountInput: command.AmountInput, TaxRuleCode: command.TaxRuleCode, DeliveryDate: command.DeliveryDate, PaymentTermDays: command.PaymentTermDays}, Errors: validation, Accounts: accounts, TaxRules: tax.RuleOptions(), IdempotencyKey: command.IdempotencyKey, TaxPreview: taxPreview(command.AmountInput, command.TaxRuleCode)}
+	invoices, invoiceErr := handler.service.InvoiceOptions(r.Context(), command.CompanyAccountID, command.ID)
+	if invoiceErr != nil {
+		handler.serverError(w, invoiceErr)
+		return
+	}
+	form := ReceivableFormViewModel{Mode: "edit", Action: "/receivables/" + strconv.FormatInt(command.ID, 10), SubmitLabel: "Save changes", PageTitle: "Edit delivery receivable", ReceivableID: command.ID, RowVersion: base64.RawURLEncoding.EncodeToString(version), Values: CreateReceivableCommand{CompanyAccountID: command.CompanyAccountID, InvoiceID: command.InvoiceID, PONumber: command.PONumber, AmountInput: command.AmountInput, TaxRuleCode: command.TaxRuleCode, DeliveryDate: command.DeliveryDate, PaymentTermDays: command.PaymentTermDays}, Errors: validation, Accounts: accounts, Invoices: invoices, TaxRules: tax.RuleOptions(), IdempotencyKey: command.IdempotencyKey, TaxPreview: taxPreview(command.AmountInput, command.TaxRuleCode)}
 	if isHTMX(r) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		handler.render(w, handler.formTemplate, "receivable-form", form)
@@ -654,3 +683,8 @@ func requestID(r *http.Request) string {
 }
 
 func isHTMX(r *http.Request) bool { return r.Header.Get("HX-Request") == "true" }
+
+func parseFormID(value string) int64 {
+	id, _ := strconv.ParseInt(value, 10, 64)
+	return id
+}

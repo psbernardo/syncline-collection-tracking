@@ -1,6 +1,6 @@
 {{ define "content" }}
 <div id="receivable-detail-page" x-data="{ reverseOpen: {{ .ReversePaymentForm.Open }} }" x-effect="if (reverseOpen) $nextTick(() => $refs.reversalReason?.focus())">
-  <nav class="payment-breadcrumb" aria-label="Breadcrumb"><a href="/receivables">Receivables</a><span aria-hidden="true">/</span><span aria-current="page">Invoice {{ .Receivable.InvoiceNumber }}</span></nav>
+  <nav class="payment-breadcrumb" aria-label="Breadcrumb"><a href="/receivables">Receivables</a><span aria-hidden="true">/</span><span aria-current="page">{{ if .Receivable.InvoiceID }}<a href="/invoices/{{ .Receivable.InvoiceID }}">Invoice {{ .Receivable.InvoiceNumber }}</a>{{ else }}Invoice {{ .Receivable.InvoiceNumber }}{{ end }}</span></nav>
   <header class="payment-page-heading detail-page-heading"><div><p class="eyebrow">Receivable details</p><h1>Invoice {{ .Receivable.InvoiceNumber }}</h1><p class="muted">{{ .Receivable.CompanyName }} <span aria-hidden="true">·</span> PO {{ .Receivable.PONumber }}</p></div></header>
   <div class="detail-layout">
     <section class="card detail-overview-card" aria-labelledby="receivable-overview-heading">

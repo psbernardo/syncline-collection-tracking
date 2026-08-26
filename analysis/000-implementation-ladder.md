@@ -52,6 +52,10 @@ This is the canonical implementation tracker for the project. The three-digit fi
 | 036 | Planned | Invoice-to-receivable collection handoff | [`036-receivable-handoff-plan.md`](./036-receivable-handoff-plan.md); integration with existing receivables | High |
 | 037 | Planned | Trading MVP reporting, hardening, and release | [`037-trading-mvp-release-plan.md`](./037-trading-mvp-release-plan.md); final verification plan | High |
 | 038 | Partial | Supplier-product searchable selectors | [`038-supplier-product-searchable-dropdown-plan.md`](./038-supplier-product-searchable-dropdown-plan.md); searchable single-select UI, active option loading, strict ID validation, and relationship edit identity rules exist; browser verification remains | High |
+| 046 | Partial | Quotation allocation and repeat sales-order creation | [`046-quotation-sales-order-conversion-plan.md`](./046-quotation-sales-order-conversion-plan.md); migration `0018`, allocation-aware quotation conversion, standalone repeat-order route, shared sales-order pages, and tests exist in the active worktree; live SQL/browser verification remains | High |
+| 049 | Partial | Auto-generated sales-order numbering | [`049-sales-order-number-plan.md`](./049-sales-order-number-plan.md); sequence preview, immutable edit display, and PDF sales-order metadata are implemented in the active worktree; live SQL/browser verification remains | High |
+| 054 | Planned | Purchase-order multi-source and direct purchasing | [`054-purchase-order-multi-source-direct-purchase-plan.md`](./054-purchase-order-multi-source-direct-purchase-plan.md); implementation not started | High |
+| 055 | Partial | Supplier-scoped bulk product configuration | [`055-supplier-bulk-product-configuration-plan.md`](./055-supplier-bulk-product-configuration-plan.md); supplier catalog routes/UI, set-based bulk creation, zero-cost defaults, audit events, and automated tests pass; live SQL/browser verification remains | High |
 
 ## Current State
 

@@ -14,14 +14,20 @@ import (
 var templateFiles embed.FS
 
 type Handler struct {
-	service  *Service
-	template *template.Template
+	service       *Service
+	template      *template.Template
+	salesTemplate *template.Template
 }
 
 type page struct {
 	Title     string
 	ActiveNav string
 	Totals    DashboardViewModel
+}
+
+type salesPage struct {
+	Title, ActiveNav string
+	Sales            SalesDashboardViewModel
 }
 
 func NewHandler(service *Service) (*Handler, error) {
@@ -33,12 +39,36 @@ func NewHandler(service *Service) (*Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse dashboard templates: %w", err)
 	}
-	return &Handler{service: service, template: parsed}, nil
+	salesParsed, err := template.New("sales-dashboard").ParseFS(webtemplates.FS, "layout.html", "partials/*.html")
+	if err != nil {
+		return nil, fmt.Errorf("parse sales dashboard layout: %w", err)
+	}
+	salesParsed, err = salesParsed.ParseFS(templateFiles, "templates/sales-dashboard.html")
+	if err != nil {
+		return nil, fmt.Errorf("parse sales dashboard template: %w", err)
+	}
+	return &Handler{service: service, template: parsed, salesTemplate: salesParsed}, nil
 }
 
 func (handler *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /dashboard", handler.dashboard)
 	mux.HandleFunc("GET /dashboard/summary", handler.summary)
+}
+
+func (handler *Handler) RegisterSalesRoutes(mux *http.ServeMux, service *SalesService) {
+	mux.HandleFunc("GET /dashboard/sales", func(w http.ResponseWriter, r *http.Request) {
+		data, err := service.Dashboard(r.Context())
+		if err != nil {
+			handler.serverError(w, err)
+			return
+		}
+		handler.renderSales(w, salesPage{Title: "Sales dashboard", ActiveNav: "sales-dashboard", Sales: data})
+	})
+}
+
+func (handler *Handler) renderSales(w http.ResponseWriter, data any) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = handler.salesTemplate.ExecuteTemplate(w, "layout", data)
 }
 
 func (handler *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +77,7 @@ func (handler *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		handler.serverError(w, err)
 		return
 	}
-	handler.render(w, "layout", page{Title: "Dashboard", ActiveNav: "dashboard", Totals: totals})
+	handler.render(w, "layout", page{Title: "Collection dashboard", ActiveNav: "collection-dashboard", Totals: totals})
 }
 
 func (handler *Handler) summary(w http.ResponseWriter, r *http.Request) {

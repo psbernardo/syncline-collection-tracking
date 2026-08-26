@@ -120,6 +120,7 @@ type ReceivableViewModel struct {
 	ID                 int64
 	CompanyAccountID   int64
 	CompanyName        string
+	InvoiceID          int64
 	InvoiceNumber      string
 	PONumber           string
 	AmountDisplay      string
@@ -159,6 +160,7 @@ type ReceivableFormViewModel struct {
 	Values         CreateReceivableCommand
 	Errors         ValidationErrors
 	Accounts       []AccountOption
+	Invoices       []InvoiceOption
 	TaxRules       []tax.RuleOption
 	IdempotencyKey string
 	TaxPreview     TaxPreviewViewModel
@@ -222,8 +224,7 @@ type ReversePaymentFormViewModel struct {
 func toViewModel(receivable DeliveryReceivable, now time.Time) ReceivableViewModel {
 	classification := receivable.ClassificationAt(now)
 	return ReceivableViewModel{
-		ID: receivable.ID, CompanyAccountID: receivable.CompanyAccountID, InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber,
-		CompanyName:   receivable.CompanyName,
+		ID: receivable.ID, CompanyAccountID: receivable.CompanyAccountID, CompanyName: receivable.CompanyName, InvoiceID: receivable.InvoiceID, InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber,
 		AmountDisplay: receivable.AmountDue.FormatPHP(), DeliveryDate: businessdate.FormatUTC(receivable.DeliveryDateUTC),
 		GrossAmountDisplay: receivable.GrossAmount.FormatPHP(), TaxBaseDisplay: receivable.TaxBase.FormatPHP(), VATDisplay: receivable.VATAmount.FormatPHP(), EWTDisplay: receivable.EWTAmount.FormatPHP(), NetPayableDisplay: receivable.AmountDue.FormatPHP(), TaxRuleLabel: taxRuleLabel(receivable.TaxRuleCode),
 		DueDate: businessdate.FormatUTC(receivable.DueDateUTC), PaymentTermDays: receivable.PaymentTermDays,

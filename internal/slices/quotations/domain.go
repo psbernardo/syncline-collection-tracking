@@ -15,7 +15,8 @@ type Status string
 const (
 	Draft     Status = "DRAFT"
 	Sent      Status = "SENT"
-	Accepted  Status = "ACCEPTED"
+	Approved  Status = "APPROVED"
+	Accepted  Status = Approved // Legacy Go name retained for callers.
 	Expired   Status = "EXPIRED"
 	Rejected  Status = "REJECTED"
 	Cancelled Status = "CANCELLED"
@@ -31,6 +32,7 @@ const (
 )
 
 type Line struct {
+	ID                                            int64
 	ProductID                                     int64
 	ProductSKU, ProductName                       string
 	Quantity                                      money.Amount
@@ -266,7 +268,7 @@ func rate(amount money.Amount, scaledRate int64) (money.Amount, error) {
 func NormalizeStatus(value string) (Status, error) {
 	s := Status(strings.ToUpper(strings.TrimSpace(value)))
 	switch s {
-	case Draft, Sent, Accepted, Expired, Rejected, Cancelled:
+	case Draft, Sent, Approved, Expired, Rejected, Cancelled:
 		return s, nil
 	}
 	return "", fmt.Errorf("%w: invalid status", ErrInvalidQuotation)

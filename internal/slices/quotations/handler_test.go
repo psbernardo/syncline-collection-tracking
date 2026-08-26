@@ -79,6 +79,27 @@ func TestQuotationFromFormParsesValidityAndTerms(t *testing.T) {
 	}
 }
 
+func TestQuotationFromFormTreatsBlankSupplierCostAsZero(t *testing.T) {
+	form := url.Values{
+		"company_account_id": {"42"}, "terms_days": {"30"}, "commission_type": {"NONE"}, "commission_rate": {"0"},
+		"lines[0].product_id": {"1"}, "lines[0].quantity": {"1"}, "lines[0].unit_price": {"10"},
+		"lines[1].product_id": {"2"}, "lines[1].quantity": {"2"}, "lines[1].unit_price": {"20"},
+		"lines[1].supplier_cost": {""},
+	}
+	r := httptest.NewRequest("POST", "/quotations", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if err := r.ParseForm(); err != nil {
+		t.Fatal(err)
+	}
+	value, err := quotationFromForm(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(value.Lines) != 2 || value.Lines[1].SupplierCost != 0 {
+		t.Fatalf("unexpected lines: %+v", value.Lines)
+	}
+}
+
 func TestQuotationFromFormParsesDatePickerValue(t *testing.T) {
 	form := url.Values{"validity_date": {"2099-12-31"}, "terms_days": {"30"}, "commission_type": {"NONE"}, "commission_rate": {"0"}, "lines[0].product_id": {"1"}, "lines[0].quantity": {"1"}, "lines[0].unit_price": {"10"}, "lines[0].supplier_cost": {"0"}}
 	r := httptest.NewRequest("POST", "/quotations", strings.NewReader(form.Encode()))
@@ -237,6 +258,26 @@ func TestQuotationPDFPaginatesItemsWithoutRepeatingFullHeader(t *testing.T) {
 	}
 	if pdfWidth != 595 || pdfHeight != 842 {
 		t.Fatalf("expected standard A4 portrait dimensions, got %.0fx%.0f", pdfWidth, pdfHeight)
+	}
+}
+
+func TestQuotationPDFFitsLongMetadata(t *testing.T) {
+	quotation := Quotation{Number: "QT-00000024", CompanyName: "ACME Corporation", CustomerAddress: "Customer address", Lines: []Line{{ProductName: "Product", Quantity: 10000, UOM: "PC", UnitPrice: 10000, VATInclusiveTotal: 10000}}}
+	renderer := NewQuotationPDFRenderer()
+	renderer.Metadata = []PDFMetadata{
+		{Label: "SALES ORDER NO.", Value: "SO-00000003"},
+		{Label: "ORDER DATE", Value: "August 23 2026"},
+		{Label: "QUOTATION REF #", Value: "QT-00000024"},
+		{Label: "SALES PERSON", Value: "A very long sales person name for layout testing"},
+		{Label: "PO NUMBER", Value: "CUSTOMER-PO-2026-000001-LONG-VALUE"},
+		{Label: "PAYMENT TERMS #", Value: "Net 30 days from customer receipt"},
+	}
+	var output bytes.Buffer
+	if err := renderer.Render(&output, quotation); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(output.Bytes(), []byte("%PDF-")) {
+		t.Fatal("response is not a PDF")
 	}
 }
 

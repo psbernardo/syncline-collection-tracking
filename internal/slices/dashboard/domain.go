@@ -42,6 +42,69 @@ type Query struct {
 	Now time.Time
 }
 
+type SalesDashboard struct {
+	Monthly      []SalesPeriod
+	Yearly       []SalesPeriod
+	Orders       int64
+	Total        int64
+	TopCustomers []SalesLeader
+	TopProducts  []SalesLeader
+}
+
+type SalesPeriod struct {
+	Label        string
+	AmountScaled int64
+	OrderCount   int64
+}
+
+type SalesLeader struct {
+	Name         string
+	AmountScaled int64
+	OrderCount   int64
+}
+
+type SalesDashboardViewModel struct {
+	Monthly        []SalesPeriodViewModel
+	Yearly         []SalesPeriodViewModel
+	Orders         int64
+	TotalDisplay   string
+	AverageDisplay string
+	TopCustomers   []SalesLeaderViewModel
+	TopProducts    []SalesLeaderViewModel
+}
+
+type SalesPeriodViewModel struct {
+	Label         string
+	AmountDisplay string
+	OrderCount    int64
+}
+
+type SalesLeaderViewModel struct {
+	Name          string
+	AmountDisplay string
+	OrderCount    int64
+}
+
+func (dashboard SalesDashboard) ViewModel() SalesDashboardViewModel {
+	view := SalesDashboardViewModel{Orders: dashboard.Orders, TotalDisplay: formatAmount(dashboard.Total), AverageDisplay: formatAmount(0)}
+	if dashboard.Orders > 0 {
+		view.AverageDisplay = formatAmount(dashboard.Total / dashboard.Orders)
+	}
+	for _, period := range dashboard.Monthly {
+		view.Monthly = append(view.Monthly, SalesPeriodViewModel{Label: period.Label, AmountDisplay: formatAmount(period.AmountScaled), OrderCount: period.OrderCount})
+	}
+	for _, period := range dashboard.Yearly {
+		view.Yearly = append(view.Yearly, SalesPeriodViewModel{Label: period.Label, AmountDisplay: formatAmount(period.AmountScaled), OrderCount: period.OrderCount})
+	}
+	for _, leader := range dashboard.TopCustomers {
+		view.TopCustomers = append(view.TopCustomers, SalesLeaderViewModel{Name: leader.Name, AmountDisplay: formatAmount(leader.AmountScaled), OrderCount: leader.OrderCount})
+	}
+	for _, leader := range dashboard.TopProducts {
+		view.TopProducts = append(view.TopProducts, SalesLeaderViewModel{Name: leader.Name, AmountDisplay: formatAmount(leader.AmountScaled), OrderCount: leader.OrderCount})
+	}
+	return view
+}
+
 func boundaries(now time.Time) (today, nearEnd time.Time) {
 	return businessdate.ClassificationBoundaries(now)
 }

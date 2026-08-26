@@ -156,6 +156,7 @@ func (repository *GormRepository) Update(ctx context.Context, db *gorm.DB, recei
 		Where("delivery_receivable_id = ? AND row_version = ?", receivable.ID, originalVersion).
 		Updates(map[string]interface{}{
 			"company_account_id":   receivable.CompanyAccountID,
+			"invoice_id":           nullableInvoiceID(receivable.InvoiceID),
 			"invoice_number":       receivable.InvoiceNumber,
 			"po_number":            receivable.PONumber,
 			"po_number_normalized": receivable.PONumberNormalized,
@@ -179,7 +180,7 @@ func (repository *GormRepository) Update(ctx context.Context, db *gorm.DB, recei
 	return repository.FindByID(ctx, db, receivable.ID)
 }
 
-const receivableSelect = "r.delivery_receivable_id, r.company_account_id, a.company_name, r.invoice_number, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.gross_amount_scaled, r.tax_rule_code, r.ewt_amount_scaled, r.tax_base_scaled, r.vat_amount_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version"
+const receivableSelect = "r.delivery_receivable_id, r.company_account_id, a.company_name, r.invoice_id, r.invoice_number, r.po_number, r.po_number_normalized, r.delivery_date_utc, r.payment_term_days, r.due_date_utc, r.amount_due_scaled, r.gross_amount_scaled, r.tax_rule_code, r.ewt_amount_scaled, r.tax_base_scaled, r.vat_amount_scaled, r.payment_date_utc, r.lifecycle_status, r.created_at_utc, r.updated_at_utc, r.row_version"
 
 func (repository *GormRepository) MarkPaymentReceived(ctx context.Context, db *gorm.DB, id int64, paymentDate time.Time, originalVersion []byte) (DeliveryReceivable, error) {
 	result := db.WithContext(ctx).Model(&receivableModel{}).

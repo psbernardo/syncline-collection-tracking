@@ -26,6 +26,12 @@ const (
 	pdfTotalsHeight       = 48.0
 	pdfFooterSpacing      = 24.0
 	pdfFooterHeight       = 42.0
+	pdfMetadataLabelWidth = 98.0
+	pdfMetadataValueX     = 445.0
+	pdfMetadataValueWidth = 126.0
+	pdfMetadataMinHeight  = 22.0
+	pdfMetadataLineHeight = 11.0
+	pdfMetadataTableGap   = 16.0
 )
 
 type SellerProfile struct {
@@ -39,7 +45,6 @@ type SellerProfile struct {
 type QuotationPDFRenderer struct {
 	Seller   SellerProfile
 	Font     string
-	Title    string
 	Metadata []PDFMetadata
 }
 
@@ -55,15 +60,7 @@ func NewQuotationPDFRenderer() *QuotationPDFRenderer {
 		Email:   envOr("SELLER_EMAIL", "syncline.mae@gmail.com"),
 		Phone:   envOr("SELLER_PHONE", "63 927 670 7281"),
 		Logo:    findPDFLogo(),
-	}, Font: findPDFFont(), Title: "QUOTATION"}
-}
-
-func NewDocumentPDFRenderer(title string) *QuotationPDFRenderer {
-	renderer := NewQuotationPDFRenderer()
-	if strings.TrimSpace(title) != "" {
-		renderer.Title = title
-	}
-	return renderer
+	}, Font: findPDFFont()}
 }
 
 func (r *QuotationPDFRenderer) Render(w io.Writer, quotation Quotation) error {
@@ -90,11 +87,11 @@ func (r *QuotationPDFRenderer) Render(w io.Writer, quotation Quotation) error {
 	if len(metadata) == 0 {
 		metadata = quotationMetadata(quotation)
 	}
-	page := pdfPage{pdf: pdf, seller: r.Seller, quotation: quotation, title: r.Title, metadata: metadata}
+	page := pdfPage{pdf: pdf, seller: r.Seller, quotation: quotation, metadata: metadata}
 	page.drawHeader()
 	page.drawSeller()
-	page.drawCustomer()
-	y := page.drawTableHeader(pdfFirstTableY)
+	customerBottom := page.drawCustomer()
+	y := page.drawTableHeader(maxFloat(pdfFirstTableY, customerBottom+pdfMetadataTableGap))
 
 	lastRowBottom := y
 	for index, line := range quotation.Lines {
@@ -110,7 +107,7 @@ func (r *QuotationPDFRenderer) Render(w io.Writer, quotation Quotation) error {
 		}
 		if needsPage {
 			pdf.AddPage()
-			page = pdfPage{pdf: pdf, seller: r.Seller, quotation: quotation, title: r.Title, metadata: metadata}
+			page = pdfPage{pdf: pdf, seller: r.Seller, quotation: quotation, metadata: metadata}
 			y = page.drawTableHeader(pdfContinuationTableY)
 		}
 		page.drawLine(y, rowHeight, index+1, line, lines)
@@ -123,7 +120,7 @@ func (r *QuotationPDFRenderer) Render(w io.Writer, quotation Quotation) error {
 	// fits; retain a safe fallback for an unusually tall wrapped row.
 	if !page.finalContentFits(lastRowBottom) {
 		pdf.AddPage()
-		page = pdfPage{pdf: pdf, seller: r.Seller, quotation: quotation, title: r.Title, metadata: metadata}
+		page = pdfPage{pdf: pdf, seller: r.Seller, quotation: quotation, metadata: metadata}
 		lastRowBottom = pdfContinuationTableY + 20
 	}
 	totalsY := lastRowBottom + pdfFooterGap
@@ -149,7 +146,6 @@ type pdfPage struct {
 	pdf       *gopdf.GoPdf
 	seller    SellerProfile
 	quotation Quotation
-	title     string
 	metadata  []PDFMetadata
 }
 
@@ -161,12 +157,17 @@ func (p pdfPage) drawHeader() {
 	} else {
 		p.text(30, 62, 18, "LOGO", 115, gopdf.Center, "B", pdfPurple)
 	}
-	if p.title == "QUOTATION" {
-		p.text(342, 100, 25, p.title, 225, gopdf.Right, "B", pdfPurple)
-		p.text(342, 125, 8.5, "QUOTE NUMBER: "+p.quotation.Number, 225, gopdf.Right, "B", pdfPurple)
-	} else {
-		p.text(342, 100, 25, p.title, 225, gopdf.Right, "B", pdfPurple)
+	p.text(342, 100, 25, "QUOTATION", 225, gopdf.Right, "B", pdfPurple)
+	p.text(342, 125, 8.5, p.quotation.Number, 225, gopdf.Right, "B", pdfPurple)
+}
+
+func metadataValue(metadata []PDFMetadata, label string) string {
+	for _, field := range metadata {
+		if field.Label == label {
+			return field.Value
+		}
 	}
+	return ""
 }
 
 func quotationMetadata(q Quotation) []PDFMetadata {
@@ -189,19 +190,44 @@ func (p pdfPage) drawSeller() {
 	p.text(30, 143, 8.5, asciiText(p.seller.Email), 300, gopdf.Left, "", "black")
 }
 
-func (p pdfPage) drawCustomer() {
+func (p pdfPage) drawCustomer() float64 {
 	p.drawParty(30, 188, "BILL TO", p.quotation.CustomerAddress, true)
 	p.drawParty(30, 242, "SHIP TO", p.quotation.CustomerDeliveryAddress, false)
 	metadataIndex := 0
+	metadataBottom := 188.0
 	for _, field := range p.metadata {
-		if p.title == "QUOTATION" && field.Label == "QUOTE NUMBER" {
+		if field.Label == "QUOTE NUMBER" {
 			continue
 		}
-		y := 188 + float64(metadataIndex)*27
-		p.text(342, y, 9, field.Label, 95, gopdf.Right, "B", pdfPurple)
-		p.text(445, y, 9, field.Value, 126, gopdf.Right, "", "black")
+		labelLines := p.metadataLines(field.Label, pdfMetadataLabelWidth)
+		valueLines := p.metadataLines(field.Value, pdfMetadataValueWidth)
+		lineCount := len(labelLines)
+		if len(valueLines) > lineCount {
+			lineCount = len(valueLines)
+		}
+		rowHeight := maxFloat(pdfMetadataMinHeight, float64(lineCount)*pdfMetadataLineHeight+5)
+		y := metadataBottom
+		p.metadataText(342, y+2, labelLines, pdfMetadataLabelWidth, gopdf.Right, "B", pdfPurple, rowHeight)
+		p.metadataText(pdfMetadataValueX, y+2, valueLines, pdfMetadataValueWidth, gopdf.Right, "", "black", rowHeight)
+		metadataBottom = y + rowHeight
 		metadataIndex++
 	}
+	return maxFloat(metadataBottom, 259)
+}
+
+func (p pdfPage) metadataLines(value string, width float64) []string {
+	lines, err := p.pdf.SplitText(asciiText(value), width)
+	if err != nil || len(lines) == 0 {
+		return []string{asciiText(value)}
+	}
+	return lines
+}
+
+func (p pdfPage) metadataText(x, y float64, lines []string, width float64, align int, style, color string, height float64) {
+	p.pdf.SetXY(x, y)
+	p.pdf.SetTextColor(rgb(color))
+	_ = p.pdf.SetFont(fontFamily(style), "", 9)
+	_ = p.pdf.MultiCellWithOption(&gopdf.Rect{W: width, H: height}, strings.Join(lines, "\n"), gopdf.CellOption{Align: align})
 }
 
 func (p pdfPage) drawParty(x, y float64, title, address string, includeCompany bool) {

@@ -13,7 +13,7 @@ import (
 )
 
 func TestNewReceivableFormRendersAccounts(t *testing.T) {
-	handler, err := NewHandler(NewService(nil, &fakeReceivableRepository{}, &fakeAccountRepository{}))
+	handler, err := NewHandler(NewService(nil, &fakeReceivableRepository{}, &fakeAccountRepository{}, &fakeInvoiceRepository{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,8 +26,8 @@ func TestNewReceivableFormRendersAccounts(t *testing.T) {
 	if !strings.Contains(recorder.Body.String(), "Acme Corp") {
 		t.Fatal("company option was not rendered")
 	}
-	if !strings.Contains(recorder.Body.String(), `name="invoice_number"`) {
-		t.Fatal("invoice number field was not rendered")
+	if !strings.Contains(recorder.Body.String(), `name="invoice_id"`) || strings.Contains(recorder.Body.String(), `name="invoice_number"`) || !strings.Contains(recorder.Body.String(), "INV001") {
+		t.Fatal("invoice selection field was not rendered")
 	}
 	for _, expected := range []string{`id="receivable-tax-preview"`, `hx-get="/receivables/tax-preview"`, `hx-trigger="input changed delay:300ms, change"`, `hx-include="#tax_rule_code"`, `hx-include="#amount"`} {
 		if !strings.Contains(recorder.Body.String(), expected) {
@@ -306,6 +306,16 @@ func TestPaidReceivableDetailRendersReversalDialog(t *testing.T) {
 }
 
 type fakeAccountRepository struct{}
+
+type fakeInvoiceRepository struct{}
+
+func (*fakeInvoiceRepository) ListSelectable(context.Context, int64, int64) ([]InvoiceOption, error) {
+	return []InvoiceOption{{ID: 1, Number: "INV001", CompanyAccountID: 1, CompanyName: "Acme Corp", Status: "POSTED"}}, nil
+}
+
+func (*fakeInvoiceRepository) FindSelectable(context.Context, *gorm.DB, int64, int64) (InvoiceOption, error) {
+	return InvoiceOption{ID: 1, Number: "INV001", CompanyAccountID: 1, CompanyName: "Acme Corp", Status: "POSTED"}, nil
+}
 
 func (*fakeAccountRepository) Exists(context.Context, *gorm.DB, int64) (bool, error) {
 	return true, nil

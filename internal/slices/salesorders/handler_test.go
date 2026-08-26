@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -72,5 +73,111 @@ func TestSalesOrderPDFUsesSalesOrderTitle(t *testing.T) {
 	}
 	if got := w.Header().Get("Content-Disposition"); got != `attachment; filename="SO-00000009.pdf"` {
 		t.Fatalf("unexpected filename: %q", got)
+	}
+}
+
+func TestStandaloneSalesOrderPageUsesSharedLayout(t *testing.T) {
+	h := NewHandler(&orderRepo{}, quotationRepo{value: testQuotation()})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/sales-orders/new", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "New repeat order") {
+		t.Fatalf("unexpected repeat-order page: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestQuotationSalesOrderPageShowsRemainingLines(t *testing.T) {
+	q := testQuotation()
+	q.Status = quotations.Approved
+	h := NewHandler(&orderRepo{}, quotationRepo{value: q})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/quotations/7/sales-order/new", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Move all remaining") || !strings.Contains(w.Body.String(), "Product") {
+		t.Fatalf("unexpected quotation conversion page: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestStandaloneFormParsesCustomerAndLines(t *testing.T) {
+	form := url.Values{"company_account_id": {"42"}, "customer_po_number": {"PO-123"}, "terms_days": {"30"}, "lines[0].product_id": {"9"}, "lines[0].quantity": {"2"}, "lines[0].uom": {"BOX"}, "lines[0].unit_price": {"125"}, "lines[0].tax_code": {"NONE"}, "lines[0].tax_rate": {"0"}}
+	r := httptest.NewRequest("POST", "/sales-orders", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	input, err := standaloneFromForm(r)
+	if err != nil || input.CompanyAccountID != 42 || len(input.Lines) != 1 || input.Lines[0].ProductID != 9 {
+		t.Fatalf("unexpected standalone input: %+v, error=%v", input, err)
+	}
+}
+
+func TestStandaloneEditPageShowsRemoveControls(t *testing.T) {
+	q := testQuotation()
+	orders := &orderRepo{value: SalesOrder{ID: 9, Number: "SO-00000009", Status: Open, Quotation: q}}
+	h := NewHandler(orders, quotationRepo{value: q})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/sales-orders/9/edit", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Edit sales order") || !strings.Contains(w.Body.String(), "Remove") {
+		t.Fatalf("unexpected edit page: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestStandaloneOpenOrderViewShowsEditButton(t *testing.T) {
+	q := testQuotation()
+	orders := &orderRepo{value: SalesOrder{ID: 9, Number: "SO-00000009", Status: Open, Quotation: q}}
+	h := NewHandler(orders, quotationRepo{value: q})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/sales-orders/9", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `href="/sales-orders/9/edit"`) {
+		t.Fatalf("edit button missing: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestQuotationOpenOrderViewShowsEditButton(t *testing.T) {
+	q := testQuotation()
+	orders := &orderRepo{value: SalesOrder{ID: 9, Number: "SO-00000009", QuotationID: q.ID, QuotationNumber: q.Number, Status: Open, Quotation: q}}
+	h := NewHandler(orders, quotationRepo{value: q})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/sales-orders/9", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `href="/sales-orders/9/edit"`) {
+		t.Fatalf("quotation edit button missing: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestQuotationEditRequiresAcknowledgement(t *testing.T) {
+	q := testQuotation()
+	orders := &orderRepo{value: SalesOrder{ID: 9, Number: "SO-00000009", QuotationID: q.ID, Status: Open, Quotation: q}}
+	h := NewHandler(orders, quotationRepo{value: q})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("POST", "/sales-orders/9", nil))
+	if w.Code != http.StatusUnprocessableEntity || !strings.Contains(w.Body.String(), "acknowledge") {
+		t.Fatalf("expected acknowledgement error: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestQuotationSelectionsParseOnlyPositiveQuantities(t *testing.T) {
+	form := url.Values{"lines[0].id": {"11"}, "lines[0].quantity": {"4"}, "lines[1].id": {"12"}, "lines[1].quantity": {"0"}}
+	r := httptest.NewRequest("POST", "/quotations/7/sales-order", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	selections, err := selectionsFromForm(r)
+	if err != nil || len(selections) != 1 || selections[0].QuotationLineID != 11 {
+		t.Fatalf("unexpected selections: %+v, error=%v", selections, err)
+	}
+}
+
+func TestCustomerPOIsRequiredAndTrimmed(t *testing.T) {
+	if _, err := ValidateCustomerPO("   "); err == nil {
+		t.Fatal("expected blank customer PO to be rejected")
+	}
+	value, err := ValidateCustomerPO("  PO-123  ")
+	if err != nil || value != "PO-123" {
+		t.Fatalf("unexpected customer PO: %q, error=%v", value, err)
 	}
 }

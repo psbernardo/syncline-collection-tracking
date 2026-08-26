@@ -1,0 +1,10 @@
+{{ define "content" }}
+<div class="page-heading"><div><p class="eyebrow">Invoices</p><h1>Create invoice</h1><p class="lede">This invoice will be an exact, read-only copy of the Sales Order.</p></div><span class="badge">{{ .Order.Number }}</span></div>
+{{ if .Error }}<div class="form-error" role="alert">{{ .Error }}</div>{{ end }}
+<form method="post" action="/sales-orders/{{ .Order.ID }}/invoice">
+<input type="hidden" name="idempotency_key" value="{{ .IdempotencyKey }}">
+<section class="card order-context"><div class="form-grid"><div class="field"><label>Sales Order</label><strong>{{ .Order.Number }}</strong></div><div class="field"><label>Customer</label><strong>{{ .Order.Quotation.CompanyName }}</strong></div><div class="field"><label for="invoice_number">Invoice number <span class="required-field">Required</span></label><input id="invoice_number" name="invoice_number" value="{{ .InvoiceNumber }}" maxlength="100" required autofocus></div><div class="field"><label>Customer PO</label><strong>{{ .Order.CustomerPONumber }}</strong></div></div></section>
+<section class="card"><div class="card-heading"><h2>Sales Order items</h2><span class="muted">{{ len .Order.Quotation.Lines }} line(s)</span></div><div class="table-wrap"><table><thead><tr><th>Product</th><th>UOM</th><th>Quantity</th><th>Unit price</th><th>Amount</th></tr></thead><tbody>{{ range .Order.Quotation.Lines }}<tr><td><strong>{{ .ProductSKU }}</strong><br><small>{{ .ProductName }}</small></td><td>{{ .UOM }}</td><td>{{ .Quantity.Format }}</td><td>{{ .UnitPrice.FormatPHP }}</td><td>{{ .VATInclusiveTotal.FormatPHP }}</td></tr>{{ end }}</tbody></table></div></section>
+<section class="order-total"><div><span class="eyebrow">Invoice total</span><strong>{{ .Order.Quotation.Totals.Total.FormatPHP }}</strong></div><div class="form-actions"><a class="button" href="/sales-orders/{{ .Order.ID }}">Cancel</a><button class="button button-primary" type="submit">Create invoice</button></div></section>
+</form>
+{{ end }}

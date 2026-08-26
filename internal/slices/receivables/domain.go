@@ -19,6 +19,8 @@ var (
 	ErrProtected                           = errors.New("delivery receivable cannot be edited in its current state")
 	ErrDuplicatePO                         = errors.New("PO number is already used by a non-cancelled receivable")
 	ErrDuplicateInvoiceNumber              = errors.New("invoice number is already used by a non-cancelled receivable")
+	ErrInvoiceNotFound                     = errors.New("invoice not found or is not selectable")
+	ErrInvoiceCompanyMismatch              = errors.New("invoice belongs to a different company")
 	ErrIdempotencyConflict                 = errors.New("idempotency key was already used with a different request")
 	ErrAlreadyPaid                         = errors.New("delivery receivable has already been paid")
 	ErrPaymentNotAllowed                   = errors.New("payment cannot be recorded for this receivable")
@@ -45,6 +47,7 @@ type DeliveryReceivable struct {
 	ID                 int64
 	CompanyAccountID   int64
 	CompanyName        string
+	InvoiceID          int64
 	InvoiceNumber      string
 	PONumber           string
 	PONumberNormalized string
