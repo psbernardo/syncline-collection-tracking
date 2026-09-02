@@ -1,0 +1,4 @@
+{{ define "content" }}
+<div class="page-heading"><div><p class="eyebrow">Workspace</p><h1>Invoices</h1><p class="lede">Posted invoices created from Sales Orders.</p></div></div>
+<section class="card"><div class="table-wrap"><table><thead><tr><th>Invoice</th><th>Sales Order</th><th>Customer</th><th>Total</th><th>Date</th></tr></thead><tbody>{{ range .Invoices }}<tr><td><a href="/invoices/{{ .ID }}"><strong>{{ .Number }}</strong></a></td><td><a href="/sales-orders/{{ .SalesOrderID }}">{{ .SalesOrderNumber }}</a></td><td>{{ .CustomerName }}</td><td>{{ .Total.FormatPHP }}</td><td>{{ .InvoiceDateUTC.Format "01/02/2006" }}</td></tr>{{ else }}<tr><td colspan="5" class="empty-state">No invoices yet.</td></tr>{{ end }}</tbody></table></div></section>
+{{ end }}

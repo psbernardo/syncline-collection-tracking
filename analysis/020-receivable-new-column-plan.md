@@ -31,14 +31,14 @@ The new field is approved as follows:
 
 - Display label: `Invoice number`.
 - Database column: `invoice_number`.
-- Type: required `VARCHAR(100)`.
-- Input: user-entered and required when creating a receivable.
-- Validation: trimmed, non-empty, ASCII alphanumeric, maximum 100 characters, matching PO input validation.
+- Type: nullable `VARCHAR(100)`.
+- Input: optional user-entered value, or copied from the optional linked-invoice selection.
+- Validation: optional; when supplied, trimmed, ASCII alphanumeric, maximum 100 characters, matching PO input validation.
 - Visibility: list, detail, create form, and edit form, in the same operational flow as PO number.
 - Edit behavior: editable through the existing active-receivable edit flow; protected lifecycle states remain protected.
-- Existing data: migration `0004` backfills missing legacy values to `0000` and enforces `NOT NULL`.
+- Existing data: migration `0026` makes the column nullable without changing existing invoice numbers.
 
-Invoice-number uniqueness is not added because the approved requirement specifies the same validation rules as PO number, not the PO-specific duplicate constraint.
+Invoice-number uniqueness applies only to supplied values on non-cancelled receivables; blank values do not reserve a number.
 
 ## 3. Recommended Scope Classification
 
@@ -57,7 +57,7 @@ Use this path when the new column is a relabeling, layout change, or presentatio
 Use this path when the value is stored on `dbo.delivery_receivables`:
 
 1. Record the approved field contract in `analysis/006-database-schema.md` and the delivery receivable mapping in `analysis/002-technical-plan.md`.
-2. Add `schema_0004.go` with an explicit `up0004` and `down0004`, then register it in `internal/migrations/migrations.go`.
+2. Add a new versioned migration with explicit `up` and `down` operations, then register it in `internal/migrations/migrations.go`.
 3. Use an explicit SQL Server type, nullability, default/backfill rule, constraint, and index only if an approved query requires one.
 4. Update `receivableModel`, `DeliveryReceivable`, conversion functions, and all explicit `SELECT` projections.
 5. Add the field to create/update commands and domain validation only if it is user-controlled.
@@ -149,7 +149,7 @@ For a new database column:
 
 - Full list includes the new heading and value.
 - HTMX results include the same column without duplicating the results target.
-- Detail includes the value where required.
+- Detail includes the value when supplied.
 - Create/edit forms render the field, preserve input, and show errors when applicable.
 - Normal requests and JavaScript-disabled flows remain usable.
 - Empty, error, mobile, and protected-state behavior remain valid.
@@ -159,7 +159,7 @@ For a new database column:
 - The approved field contract is documented before code changes begin.
 - The field is correctly classified as UI-only, derived, or persisted.
 - A persisted field has a reviewed versioned migration and matching GORM/domain mappings.
-- All explicit receivable projections return the required value.
+- All explicit receivable projections return the optional value.
 - List, detail, create, edit, filter, dashboard, audit, and idempotency behavior are updated only where relevant.
 - No financial calculation is duplicated in templates or Alpine.js.
 - Existing receivable data is preserved and migration backfill is verified.
@@ -178,4 +178,4 @@ This plan is the initial documentation update. After the field is approved, upda
 
 ## 8. Migration Behavior
 
-Code implementation and migration handling are complete. Migration `0004` assigns `0000` to existing rows through a named SQL Server default constraint, then enforces the required column and non-empty check constraint.
+Code implementation and migration handling are complete. Migration `0026` makes the invoice number nullable and limits the filtered uniqueness rule to supplied values.

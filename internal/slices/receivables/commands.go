@@ -24,6 +24,7 @@ type AccountRepository interface {
 
 type CreateReceivableCommand struct {
 	CompanyAccountID int64
+	InvoiceID        int64
 	InvoiceNumber    string
 	PONumber         string
 	AmountInput      string
@@ -38,6 +39,7 @@ type CreateReceivableCommand struct {
 type UpdateReceivableCommand struct {
 	ID               int64
 	CompanyAccountID int64
+	InvoiceID        int64
 	InvoiceNumber    string
 	PONumber         string
 	AmountInput      string
@@ -72,24 +74,57 @@ type service struct {
 	db       *gorm.DB
 	repo     Repository
 	accounts AccountRepository
+	invoices InvoiceRepository
 	now      func() time.Time
 }
 
-func NewService(db *gorm.DB, repo Repository, accountRepo AccountRepository) *service {
-	return &service{db: db, repo: repo, accounts: accountRepo, now: func() time.Time { return time.Now().UTC() }}
+func NewService(db *gorm.DB, repo Repository, accountRepo AccountRepository, invoiceRepo ...InvoiceRepository) *service {
+	var selected InvoiceRepository
+	if len(invoiceRepo) > 0 {
+		selected = invoiceRepo[0]
+	}
+	return &service{db: db, repo: repo, accounts: accountRepo, invoices: selected, now: func() time.Time { return time.Now().UTC() }}
 }
 
 func (service *service) Create(ctx context.Context, command CreateReceivableCommand) (DeliveryReceivable, error) {
-	receivable, err := NewDeliveryReceivableWithTax(command.CompanyAccountID, command.InvoiceNumber, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays, command.TaxRuleCode)
+	var invoice InvoiceOption
+	var err error
+	invoiceNumber := command.InvoiceNumber
+	if command.InvoiceID > 0 {
+		if service.invoices == nil {
+			return DeliveryReceivable{}, ValidationErrors{"InvoiceNumber": "Select a valid invoice for this company."}
+		}
+		invoice, err = service.invoices.FindSelectable(ctx, nil, command.InvoiceID, 0)
+		if err != nil {
+			return DeliveryReceivable{}, err
+		}
+		if command.CompanyAccountID != invoice.CompanyAccountID {
+			return DeliveryReceivable{}, ErrInvoiceCompanyMismatch
+		}
+		invoiceNumber = invoice.Number
+	}
+	receivable, err := NewDeliveryReceivableWithTax(command.CompanyAccountID, invoiceNumber, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays, command.TaxRuleCode)
 	if err != nil {
 		return DeliveryReceivable{}, err
 	}
+	receivable.InvoiceID = invoice.ID
 	if command.IdempotencyKey == "" {
 		return DeliveryReceivable{}, fmt.Errorf("idempotency key is required")
 	}
 	payloadHash := hashPayload(receivable)
 	var result DeliveryReceivable
 	err = service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if command.InvoiceID > 0 {
+			invoice, err = service.invoices.FindSelectable(ctx, tx, command.InvoiceID, 0)
+			if err != nil {
+				return err
+			}
+			if command.CompanyAccountID != invoice.CompanyAccountID {
+				return ErrInvoiceCompanyMismatch
+			}
+			receivable.InvoiceID = invoice.ID
+			receivable.InvoiceNumber = invoice.Number
+		}
 		var existing idempotencyModel
 		findErr := tx.Where("idempotency_key = ?", command.IdempotencyKey).First(&existing).Error
 		if findErr == nil {
@@ -112,12 +147,14 @@ func (service *service) Create(ctx context.Context, command CreateReceivableComm
 		if !exists {
 			return ErrCompanyNotFound
 		}
-		duplicateInvoice, err := service.repo.FindBlockingInvoiceNumber(ctx, tx, receivable.InvoiceNumber, 0)
-		if err != nil {
-			return err
-		}
-		if duplicateInvoice {
-			return ErrDuplicateInvoiceNumber
+		if receivable.InvoiceNumber != "" {
+			duplicateInvoice, err := service.repo.FindBlockingInvoiceNumber(ctx, tx, receivable.InvoiceNumber, 0)
+			if err != nil {
+				return err
+			}
+			if duplicateInvoice {
+				return ErrDuplicateInvoiceNumber
+			}
 		}
 		duplicate, err := service.repo.FindBlockingPONumber(ctx, tx, receivable.PONumberNormalized, 0)
 		if err != nil {
@@ -156,10 +193,27 @@ func (service *service) Create(ctx context.Context, command CreateReceivableComm
 }
 
 func (service *service) Update(ctx context.Context, command UpdateReceivableCommand) (DeliveryReceivable, error) {
-	receivable, err := NewDeliveryReceivableWithTax(command.CompanyAccountID, command.InvoiceNumber, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays, command.TaxRuleCode)
+	var invoice InvoiceOption
+	var err error
+	invoiceNumber := command.InvoiceNumber
+	if command.InvoiceID > 0 {
+		if service.invoices == nil {
+			return DeliveryReceivable{}, ValidationErrors{"InvoiceNumber": "Select a valid invoice for this company."}
+		}
+		invoice, err = service.invoices.FindSelectable(ctx, nil, command.InvoiceID, command.ID)
+		if err != nil {
+			return DeliveryReceivable{}, err
+		}
+		if command.CompanyAccountID != invoice.CompanyAccountID {
+			return DeliveryReceivable{}, ErrInvoiceCompanyMismatch
+		}
+		invoiceNumber = invoice.Number
+	}
+	receivable, err := NewDeliveryReceivableWithTax(command.CompanyAccountID, invoiceNumber, command.PONumber, command.AmountInput, command.DeliveryDate, command.PaymentTermDays, command.TaxRuleCode)
 	if err != nil {
 		return DeliveryReceivable{}, err
 	}
+	receivable.InvoiceID = invoice.ID
 	receivable.ID = command.ID
 	receivable.RowVersion = command.OriginalVersion
 	if command.IdempotencyKey == "" {
@@ -168,6 +222,17 @@ func (service *service) Update(ctx context.Context, command UpdateReceivableComm
 	payloadHash := hashPayload(receivable)
 	var result DeliveryReceivable
 	err = service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if command.InvoiceID > 0 {
+			invoice, err = service.invoices.FindSelectable(ctx, tx, command.InvoiceID, command.ID)
+			if err != nil {
+				return err
+			}
+			if command.CompanyAccountID != invoice.CompanyAccountID {
+				return ErrInvoiceCompanyMismatch
+			}
+			receivable.InvoiceID = invoice.ID
+			receivable.InvoiceNumber = invoice.Number
+		}
 		var existing idempotencyModel
 		findErr := tx.Where("idempotency_key = ?", command.IdempotencyKey).First(&existing).Error
 		if findErr == nil {
@@ -197,12 +262,14 @@ func (service *service) Update(ctx context.Context, command UpdateReceivableComm
 		if previous.LifecycleStatus != "Active" || previous.PaymentDateUTC != nil {
 			return ErrProtected
 		}
-		duplicateInvoice, err := service.repo.FindBlockingInvoiceNumber(ctx, tx, receivable.InvoiceNumber, command.ID)
-		if err != nil {
-			return err
-		}
-		if duplicateInvoice {
-			return ErrDuplicateInvoiceNumber
+		if receivable.InvoiceNumber != "" {
+			duplicateInvoice, err := service.repo.FindBlockingInvoiceNumber(ctx, tx, receivable.InvoiceNumber, command.ID)
+			if err != nil {
+				return err
+			}
+			if duplicateInvoice {
+				return ErrDuplicateInvoiceNumber
+			}
 		}
 		duplicate, err := service.repo.FindBlockingPONumber(ctx, tx, receivable.PONumberNormalized, command.ID)
 		if err != nil {
@@ -245,7 +312,7 @@ func (service *service) ReceivePayment(ctx context.Context, command ReceivePayme
 	if command.IdempotencyKey == "" {
 		return DeliveryReceivable{}, fmt.Errorf("idempotency key is required")
 	}
-	paymentDate, err := businessdate.Parse(strings.TrimSpace(command.PaymentDate))
+	paymentDate, err := parsePaymentDate(command.PaymentDate)
 	if err != nil {
 		return DeliveryReceivable{}, ValidationErrors{"PaymentDate": "Enter a valid payment date."}
 	}
@@ -374,6 +441,13 @@ func (service *service) Accounts(ctx context.Context) ([]AccountOption, error) {
 		result = append(result, AccountOption{ID: account.ID, CompanyName: account.CompanyName})
 	}
 	return result, nil
+}
+
+func (service *service) InvoiceOptions(ctx context.Context, companyAccountID, excludeReceivableID int64) ([]InvoiceOption, error) {
+	if service.invoices == nil {
+		return []InvoiceOption{}, nil
+	}
+	return service.invoices.ListSelectable(ctx, companyAccountID, excludeReceivableID)
 }
 
 func (service *service) List(ctx context.Context) ([]ReceivableViewModel, error) {

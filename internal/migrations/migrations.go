@@ -32,6 +32,17 @@ var registry = []Migration{
 	{Version: 15, Name: "create sales orders", Up: up0015, Down: down0015},
 	{Version: 16, Name: "add quotation profitability costs", Up: up0016, Down: down0016},
 	{Version: 17, Name: "update shared UOM values", Up: up0017, Down: down0017},
+	{Version: 18, Name: "support quotation allocation and repeat sales orders", Up: up0018, Down: down0018},
+	{Version: 19, Name: "require sales order customer PO", Up: up0019, Down: down0019},
+	{Version: 20, Name: "create sales order invoices", Up: up0020, Down: down0020},
+	{Version: 21, Name: "link receivables to invoices", Up: up0021, Down: down0021},
+	{Version: 22, Name: "create supplier purchase orders", Up: up0022, Down: down0022},
+	{Version: 23, Name: "add purchase order terms and lifecycle statuses", Up: up0023, Down: down0023},
+	{Version: 24, Name: "create purchase order allocations", Up: up0024, Down: down0024},
+	{Version: 25, Name: "support multi-source and direct purchase orders", Up: up0025, Down: down0025},
+	{Version: 26, Name: "make receivable invoice optional", Up: up0026, Down: down0026},
+	{Version: 27, Name: "add CASE UOM", Up: up0027, Down: down0027},
+	{Version: 28, Name: "normalize sales order invoice lifecycle", Up: up0028, Down: down0028},
 }
 
 func Status(ctx context.Context, db *gorm.DB) error {

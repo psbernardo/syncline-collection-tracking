@@ -6,6 +6,7 @@ type Code string
 
 const (
 	PC   Code = "PC"
+	CASE Code = "CASE"
 	PACK Code = "PACK"
 	BTL  Code = "BTL"
 	REAM Code = "REAM"
@@ -17,11 +18,11 @@ func Normalize(value string) Code { return Code(strings.ToUpper(strings.TrimSpac
 
 func Valid(value Code) bool {
 	switch value {
-	case PC, PACK, BTL, REAM, ROLL, BOX:
+	case PC, CASE, PACK, BTL, REAM, ROLL, BOX:
 		return true
 	default:
 		return false
 	}
 }
 
-func Options() []Code { return []Code{PC, PACK, BTL, REAM, ROLL, BOX} }
+func Options() []Code { return []Code{PC, CASE, PACK, BTL, REAM, ROLL, BOX} }

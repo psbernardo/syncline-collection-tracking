@@ -9,7 +9,7 @@
   <form id="payment-form" method="post" action="{{ .Action }}" hx-post="{{ .Action }}" hx-target="#payment-form" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']">
     <input type="hidden" name="idempotency_key" value="{{ .IdempotencyKey }}">
     <input type="hidden" name="row_version" value="{{ .RowVersion }}">
-    <div class="field"><label for="payment_date">Payment received date</label><input id="payment_date" name="payment_date" type="date" value="{{ .PaymentDate }}" aria-describedby="payment-date-help payment-date-error" required><p id="payment-date-help" class="field-help">Use the date the full payment was received.</p><p id="payment-date-error" class="error" aria-live="polite">{{ .Errors.PaymentDate }}</p></div>
+     {{ template "text-date-input" (dict "ID" "payment-received-date" "Name" "payment_date" "Label" "Payment received date" "Value" .PaymentDate "CanonicalValue" .PaymentDateCanonical "Placeholder" "MM/DD/YYYY" "Picker" true "Required" true "HelpID" "payment-date-help" "ErrorID" "payment-date-error" "Error" .Errors.PaymentDate) }}
     <div class="payment-protection"><span class="payment-protection-icon" aria-hidden="true">i</span><p>After acknowledgment, this receivable will show <strong>Payment Received</strong> and normal financial editing will be unavailable.</p></div>
     <div class="payment-actions"><a class="button" href="/receivables/{{ .ReceivableID }}">Cancel</a><button class="button button-primary" type="submit">Acknowledge payment</button></div>
   </form>

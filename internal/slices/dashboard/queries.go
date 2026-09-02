@@ -10,6 +10,23 @@ type Service struct {
 	now        func() time.Time
 }
 
+type SalesService struct {
+	repository SalesQueryRepository
+	now        func() time.Time
+}
+
+func NewSalesService(repository SalesQueryRepository) *SalesService {
+	return &SalesService{repository: repository, now: func() time.Time { return time.Now().UTC() }}
+}
+
+func (service *SalesService) Dashboard(ctx context.Context) (SalesDashboardViewModel, error) {
+	dashboard, err := service.repository.GetSalesDashboard(ctx, Query{Now: service.now()})
+	if err != nil {
+		return SalesDashboardViewModel{}, err
+	}
+	return dashboard.ViewModel(), nil
+}
+
 type CompanyTotalsRepository interface {
 	GetCompanyTotals(ctx context.Context, companyAccountID int64, query Query) (CompanyTotals, error)
 }

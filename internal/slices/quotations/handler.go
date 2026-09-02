@@ -27,6 +27,7 @@ type Handler struct {
 	productOptions     webtemplates.OptionsProvider
 	numberGenerator    NumberGenerator
 	pdfRenderer        *QuotationPDFRenderer
+	conversion         ConversionSummaryProvider
 }
 type listPage struct {
 	Title, ActiveNav string
@@ -42,19 +43,30 @@ type formPage struct {
 type detailPage struct {
 	Title, ActiveNav string
 	Quotation        Quotation
+	Conversion       ConversionSummary
 }
 
 const quotationDateLayout = "01/02/2006"
 
-func NewHandler(repo Repository, providers ...webtemplates.OptionsProvider) (*Handler, error) {
+func NewHandler(repo Repository, providers ...interface{}) (*Handler, error) {
 	var accountOptions, productOptions webtemplates.OptionsProvider
 	if len(providers) > 0 {
-		accountOptions = providers[0]
+		switch value := providers[0].(type) {
+		case webtemplates.OptionsProvider:
+			accountOptions = value
+		case func(context.Context) ([]webtemplates.SearchableSelectOption, error):
+			accountOptions = webtemplates.OptionsProvider(value)
+		}
 	}
 	if len(providers) > 1 {
-		productOptions = providers[1]
+		switch value := providers[1].(type) {
+		case webtemplates.OptionsProvider:
+			productOptions = value
+		case func(context.Context) ([]webtemplates.SearchableSelectOption, error):
+			productOptions = webtemplates.OptionsProvider(value)
+		}
 	}
-	functions := template.FuncMap{"dict": templateDict, "taxRate": formatTaxRate, "taxLabel": TaxLabel, "percent": formatPercent, "quotationDate": formatQuotationDate, "quotationDateInput": formatQuotationDateInput}
+	functions := template.FuncMap{"dict": templateDict, "taxRate": formatTaxRate, "taxLabel": TaxLabel, "percent": formatPercent, "quotationDate": formatQuotationDate, "quotationDateInput": formatQuotationDateInput, "quotationDateCanonical": formatQuotationDateCanonical}
 	l, err := template.New("list").Funcs(functions).ParseFS(webtemplates.FS, "layout.html", "partials/*.html")
 	if err != nil {
 		return nil, err
@@ -80,7 +92,13 @@ func NewHandler(repo Repository, providers ...webtemplates.OptionsProvider) (*Ha
 		return nil, err
 	}
 	numberGenerator, _ := repo.(NumberGenerator)
-	return &Handler{repo: repo, list: l, form: f, detail: d, accountOptions: accountOptions, productOptions: productOptions, numberGenerator: numberGenerator, pdfRenderer: NewQuotationPDFRenderer()}, nil
+	h := &Handler{repo: repo, list: l, form: f, detail: d, accountOptions: accountOptions, productOptions: productOptions, numberGenerator: numberGenerator, pdfRenderer: NewQuotationPDFRenderer()}
+	for _, provider := range providers {
+		if value, ok := provider.(ConversionSummaryProvider); ok {
+			h.conversion = value
+		}
+	}
+	return h, nil
 }
 func (h *Handler) RegisterRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /quotations", h.listPage)
@@ -90,6 +108,7 @@ func (h *Handler) RegisterRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /quotations/{id}/pdf", h.pdf)
 	m.HandleFunc("GET /quotations/{id}/edit", h.edit)
 	m.HandleFunc("POST /quotations/{id}", h.update)
+	m.HandleFunc("POST /quotations/{id}/approve", h.approve)
 }
 func (h *Handler) listPage(w http.ResponseWriter, r *http.Request) {
 	values, err := h.repo.List(r.Context())
@@ -100,7 +119,7 @@ func (h *Handler) listPage(w http.ResponseWriter, r *http.Request) {
 	h.render(w, h.list, listPage{"Quotations", "quotations", values})
 }
 func (h *Handler) newPage(w http.ResponseWriter, r *http.Request) {
-	quotation := Quotation{Status: Draft, Lines: []Line{}}
+	quotation := Quotation{Status: Draft, TaxDefaultCode: TaxVAT12, Lines: []Line{}}
 	if h.numberGenerator != nil {
 		number, err := h.numberGenerator.NextNumber(r.Context())
 		if err != nil {
@@ -143,7 +162,11 @@ func (h *Handler) view(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	h.render(w, h.detail, detailPage{"Quotation", "quotations", value})
+	page := detailPage{Title: "Quotation", ActiveNav: "quotations", Quotation: value}
+	if h.conversion != nil {
+		page.Conversion, _ = h.conversion.ConversionSummary(r.Context(), id)
+	}
+	h.render(w, h.detail, page)
 }
 
 func (h *Handler) pdf(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +189,7 @@ func (h *Handler) pdf(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Length", strconv.Itoa(output.Len()))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(output.Bytes())
 }
@@ -245,7 +269,25 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		h.render(w, h.form, page)
 		return
 	}
-	h.render(w, h.detail, detailPage{"Quotation", "quotations", updated})
+	h.render(w, h.detail, detailPage{Title: "Quotation", ActiveNav: "quotations", Quotation: updated})
+}
+
+func (h *Handler) approve(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id < 1 {
+		http.NotFound(w, r)
+		return
+	}
+	approver, ok := h.repo.(Approver)
+	if !ok {
+		http.Error(w, "Quotation approval is not available", http.StatusNotImplemented)
+		return
+	}
+	if _, err := approver.Approve(r.Context(), id); err != nil {
+		http.Error(w, "Quotation cannot be approved", http.StatusConflict)
+		return
+	}
+	http.Redirect(w, r, "/quotations/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 }
 
 func (h *Handler) prepareForm(ctx context.Context, page formPage) (formPage, error) {
@@ -356,7 +398,7 @@ func quotationFromForm(r *http.Request) (Quotation, error) {
 		seenProducts[product] = true
 		quantity, quantityErr := money.Parse(r.FormValue(prefix + "quantity"))
 		price, priceErr := money.Parse(r.FormValue(prefix + "unit_price"))
-		cost, costErr := money.Parse(r.FormValue(prefix + "supplier_cost"))
+		cost, costErr := parseOptionalAmount(r.FormValue(prefix + "supplier_cost"))
 		if quantityErr != nil || priceErr != nil || costErr != nil {
 			return value, fmt.Errorf("line %d contains an invalid amount", index+1)
 		}
@@ -393,6 +435,13 @@ func formatQuotationDateInput(value *time.Time) string {
 		return ""
 	}
 	return formatQuotationDate(*value)
+}
+
+func formatQuotationDateCanonical(value *time.Time) string {
+	if value == nil {
+		return ""
+	}
+	return value.Format("2006-01-02")
 }
 
 func parseValidityDate(value string) (time.Time, error) {

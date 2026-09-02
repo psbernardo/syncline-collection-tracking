@@ -19,6 +19,8 @@ var (
 	ErrProtected                           = errors.New("delivery receivable cannot be edited in its current state")
 	ErrDuplicatePO                         = errors.New("PO number is already used by a non-cancelled receivable")
 	ErrDuplicateInvoiceNumber              = errors.New("invoice number is already used by a non-cancelled receivable")
+	ErrInvoiceNotFound                     = errors.New("invoice not found or is not selectable")
+	ErrInvoiceCompanyMismatch              = errors.New("invoice belongs to a different company")
 	ErrIdempotencyConflict                 = errors.New("idempotency key was already used with a different request")
 	ErrAlreadyPaid                         = errors.New("delivery receivable has already been paid")
 	ErrPaymentNotAllowed                   = errors.New("payment cannot be recorded for this receivable")
@@ -45,6 +47,7 @@ type DeliveryReceivable struct {
 	ID                 int64
 	CompanyAccountID   int64
 	CompanyName        string
+	InvoiceID          int64
 	InvoiceNumber      string
 	PONumber           string
 	PONumberNormalized string
@@ -74,9 +77,7 @@ func NewDeliveryReceivableWithTax(companyID int64, invoiceNumber, poNumber, amou
 		errors["CompanyAccountID"] = "Select a company."
 	}
 	invoiceNumber = strings.TrimSpace(invoiceNumber)
-	if invoiceNumber == "" {
-		errors["InvoiceNumber"] = "This field is required."
-	} else if len(invoiceNumber) > 100 || !isAlphaNumeric(invoiceNumber) {
+	if invoiceNumber != "" && (len(invoiceNumber) > 100 || !isAlphaNumeric(invoiceNumber)) {
 		errors["InvoiceNumber"] = "Use 1-100 ASCII letters and numbers only."
 	}
 	poNumber = strings.TrimSpace(poNumber)
@@ -172,7 +173,7 @@ func (receivable DeliveryReceivable) DaysUntilDueAt(now time.Time) int {
 
 func ValidatePaymentDate(receivable DeliveryReceivable, input string, now time.Time) (time.Time, error) {
 	validation := ValidationErrors{}
-	paymentDate, err := businessdate.Parse(strings.TrimSpace(input))
+	paymentDate, err := parsePaymentDate(input)
 	if err != nil {
 		validation["PaymentDate"] = "Enter a valid payment date."
 	} else {

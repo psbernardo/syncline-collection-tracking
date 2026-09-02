@@ -1,0 +1,13 @@
+{{ define "text-date-input" }}
+<div id="{{ .ID }}" class="text-date-input{{ if .Picker }} quotation-date-control{{ end }}" x-data="textDateInput()" x-init="initialize()">
+  <label class="text-date-input-label" for="{{ .ID }}-display">{{ .Label }}</label>
+  <div class="text-date-input-control">
+    <input id="{{ .ID }}-display" type="text" inputmode="numeric" autocomplete="off" placeholder="{{ if .Placeholder }}{{ .Placeholder }}{{ else }}MM/DD/YYYY{{ end }}" value="{{ .Value }}" data-date-display{{ if .Required }} required{{ end }}{{ if .HelpID }} aria-describedby="{{ .HelpID }}{{ if .ErrorID }} {{ .ErrorID }}{{ end }}"{{ else if .ErrorID }} aria-describedby="{{ .ErrorID }}"{{ end }}{{ if .Error }} aria-invalid="true"{{ end }}>
+    {{ if .Picker }}<button class="quotation-date-picker-button" type="button" data-date-picker-trigger aria-label="Choose {{ .Label }} date">Calendar</button>{{ end }}
+  </div>
+  <input type="hidden" name="{{ .Name }}" value="{{ .CanonicalValue }}" data-date-canonical>
+  {{ if .Picker }}<input class="quotation-date-picker" type="date" value="{{ .CanonicalValue }}" data-date-picker aria-label="Choose {{ .Label }} date" tabindex="-1">{{ end }}
+  {{ if .HelpID }}<p id="{{ .HelpID }}" class="field-help">Enter the date as MM/DD/YYYY.</p>{{ end }}
+  {{ if .Error }}<p id="{{ .ErrorID }}" class="error" aria-live="polite">{{ .Error }}</p>{{ end }}
+</div>
+{{ end }}

@@ -50,6 +50,21 @@ type Repository interface {
 	Update(context.Context, Quotation, []byte) (Quotation, error)
 }
 
+type Approver interface {
+	Approve(context.Context, int64) (Quotation, error)
+}
+
+type ConversionSummary struct {
+	OrderCount int
+	Converted  money.Amount
+	Total      money.Amount
+	Remaining  money.Amount
+}
+
+type ConversionSummaryProvider interface {
+	ConversionSummary(context.Context, int64) (ConversionSummary, error)
+}
+
 type NumberGenerator interface {
 	NextNumber(context.Context) (string, error)
 }
@@ -264,6 +279,17 @@ func (r *GormRepository) Update(ctx context.Context, input Quotation, version []
 	}
 	return r.FindByID(ctx, input.ID)
 }
+
+func (r *GormRepository) Approve(ctx context.Context, id int64) (Quotation, error) {
+	result := r.db.WithContext(ctx).Model(&quotationModel{}).Where("quotation_id = ? AND status IN ?", id, []Status{Draft, Sent}).Updates(map[string]interface{}{"status": Approved, "updated_at_utc": gorm.Expr("SYSUTCDATETIME()")})
+	if result.Error != nil {
+		return Quotation{}, result.Error
+	}
+	if result.RowsAffected != 1 {
+		return Quotation{}, ErrQuotationNotEditable
+	}
+	return r.FindByID(ctx, id)
+}
 func (r *GormRepository) List(ctx context.Context) ([]Quotation, error) {
 	var rows []quotationModel
 	if err := r.db.WithContext(ctx).Order("quotation_id DESC").Find(&rows).Error; err != nil {
@@ -311,7 +337,7 @@ func (r *GormRepository) fromModel(ctx context.Context, row quotationModel) (Quo
 		if line.TaxCode == TaxVAT12 {
 			netSales = money.Amount((line.LineTotal * 100) / 112)
 		}
-		value.Lines = append(value.Lines, Line{ProductID: line.ProductID, ProductSKU: line.ProductSKU, ProductName: line.ProductName, Quantity: money.Amount(line.Quantity), UOM: line.UOM, UnitPrice: money.Amount(line.UnitPrice), TaxCode: line.TaxCode, TaxRate: line.TaxRate, SupplierCost: money.Amount(line.SupplierCost), SupplierProductCost: money.Amount(line.SupplierProductCost), CommissionAmount: money.Amount(line.CommissionAmount), ProfitBeforeCommission: money.Amount(line.ProfitBefore), ProfitAfterCommission: money.Amount(line.ProfitAfter), MarginBeforeCommission: margin(money.Amount(line.ProfitBefore), netSales), MarginAfterCommission: margin(money.Amount(line.ProfitAfter), netSales), LineTotal: money.Amount(line.LineTotal), TaxAmount: money.Amount(line.VATInclusiveTotal - line.LineTotal), VATInclusiveTotal: money.Amount(line.VATInclusiveTotal)})
+		value.Lines = append(value.Lines, Line{ID: line.ID, ProductID: line.ProductID, ProductSKU: line.ProductSKU, ProductName: line.ProductName, Quantity: money.Amount(line.Quantity), UOM: line.UOM, UnitPrice: money.Amount(line.UnitPrice), TaxCode: line.TaxCode, TaxRate: line.TaxRate, SupplierCost: money.Amount(line.SupplierCost), SupplierProductCost: money.Amount(line.SupplierProductCost), CommissionAmount: money.Amount(line.CommissionAmount), ProfitBeforeCommission: money.Amount(line.ProfitBefore), ProfitAfterCommission: money.Amount(line.ProfitAfter), MarginBeforeCommission: margin(money.Amount(line.ProfitBefore), netSales), MarginAfterCommission: margin(money.Amount(line.ProfitAfter), netSales), LineTotal: money.Amount(line.LineTotal), TaxAmount: money.Amount(line.VATInclusiveTotal - line.LineTotal), VATInclusiveTotal: money.Amount(line.VATInclusiveTotal)})
 	}
 	return value, nil
 }

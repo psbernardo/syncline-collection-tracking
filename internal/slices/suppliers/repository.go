@@ -16,6 +16,8 @@ type Repository interface {
 	ListProducts(context.Context, bool) ([]SupplierProduct, error)
 	UpdateProduct(context.Context, *gorm.DB, SupplierProduct, []byte) (SupplierProduct, error)
 	FindProduct(context.Context, *gorm.DB, int64) (SupplierProduct, error)
+	ListCatalog(context.Context, int64) ([]SupplierCatalogProduct, error)
+	ConfigureProducts(context.Context, *gorm.DB, int64, []int64) ([]SupplierProduct, int, error)
 }
 type GormRepository struct{ db *gorm.DB }
 
@@ -130,4 +132,54 @@ func (r *GormRepository) UpdateProduct(ctx context.Context, db *gorm.DB, p Suppl
 
 func (r *GormRepository) FindProduct(ctx context.Context, db *gorm.DB, id int64) (SupplierProduct, error) {
 	return r.product(ctx, db, id)
+}
+
+func (r *GormRepository) ListCatalog(ctx context.Context, supplierID int64) ([]SupplierCatalogProduct, error) {
+	var rows []SupplierCatalogProduct
+	err := r.db.WithContext(ctx).Table("dbo.products AS p").Select("p.product_id, sp.supplier_product_id, p.sku, p.name, p.uom, COALESCE(sp.reference_cost_scaled, 0) AS reference_cost, CASE WHEN sp.supplier_product_id IS NULL THEN 0 ELSE 1 END AS configured, p.is_active").Joins("LEFT JOIN dbo.supplier_products sp ON sp.product_id = p.product_id AND sp.supplier_id = ?", supplierID).Where("p.is_active = 1").Order("p.sku, p.product_id").Scan(&rows).Error
+	return rows, err
+}
+
+func (r *GormRepository) ConfigureProducts(ctx context.Context, db *gorm.DB, supplierID int64, productIDs []int64) ([]SupplierProduct, int, error) {
+	var count int64
+	if err := db.WithContext(ctx).Table("dbo.suppliers").Where("supplier_id = ? AND is_active = 1", supplierID).Count(&count).Error; err != nil {
+		return nil, 0, err
+	}
+	if count != 1 {
+		return nil, 0, ErrSupplierInactive
+	}
+	var valid int64
+	if err := db.WithContext(ctx).Table("dbo.products").Where("product_id IN ? AND is_active = 1", productIDs).Count(&valid).Error; err != nil {
+		return nil, 0, err
+	}
+	if valid != int64(len(productIDs)) {
+		return nil, 0, ErrBulkProductInactive
+	}
+	var existing int64
+	if err := db.WithContext(ctx).Table("dbo.supplier_products").Where("supplier_id = ? AND product_id IN ?", supplierID, productIDs).Count(&existing).Error; err != nil {
+		return nil, 0, err
+	}
+	var existingIDs []int64
+	if err := db.WithContext(ctx).Table("dbo.supplier_products").Where("supplier_id = ? AND product_id IN ?", supplierID, productIDs).Pluck("product_id", &existingIDs).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := db.WithContext(ctx).Exec("INSERT INTO dbo.supplier_products (supplier_id, product_id, supplier_sku, reference_cost_scaled, is_active) SELECT ?, p.product_id, NULL, 0, 1 FROM dbo.products p WHERE p.product_id IN ? AND p.is_active = 1 AND NOT EXISTS (SELECT 1 FROM dbo.supplier_products existing WHERE existing.supplier_id = ? AND existing.product_id = p.product_id)", supplierID, productIDs, supplierID).Error; err != nil {
+		return nil, 0, fmt.Errorf("configure supplier products: %w", err)
+	}
+	var rows []SupplierProduct
+	err := db.WithContext(ctx).Table("dbo.supplier_products AS sp").Select("sp.supplier_product_id, sp.supplier_id, sp.product_id, s.name supplier_name, p.sku product_sku, p.name product_name, sp.supplier_sku, sp.reference_cost_scaled, sp.is_active, sp.updated_at_utc, sp.row_version").Joins("JOIN dbo.suppliers s ON s.supplier_id = sp.supplier_id").Joins("JOIN dbo.products p ON p.product_id = sp.product_id").Where("sp.supplier_id = ? AND sp.product_id IN ?", supplierID, productIDs).Order("sp.product_id").Find(&rows).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	old := make(map[int64]bool, len(existingIDs))
+	for _, id := range existingIDs {
+		old[id] = true
+	}
+	created := rows[:0]
+	for _, row := range rows {
+		if !old[row.ProductID] {
+			created = append(created, row)
+		}
+	}
+	return created, int(existing), nil
 }

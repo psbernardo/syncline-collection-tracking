@@ -19,8 +19,8 @@ import (
 var files embed.FS
 
 type Handler struct {
-	s                                 *Service
-	list, form, products, productForm *template.Template
+	s                                          *Service
+	list, form, products, productForm, catalog *template.Template
 }
 type listPage struct {
 	Title, ActiveNav string
@@ -35,6 +35,13 @@ type formPage struct {
 type productsPage struct {
 	Title, ActiveNav string
 	Products         []SupplierProduct
+}
+type catalogPage struct {
+	Title, ActiveNav, Key, Query, Message string
+	Supplier                              Supplier
+	Products                              []SupplierCatalogProduct
+	Errors                                ValidationErrors
+	Selected                              map[string]bool
 }
 
 func NewHandler(s *Service) (*Handler, error) {
@@ -70,7 +77,15 @@ func NewHandler(s *Service) (*Handler, error) {
 	if e != nil {
 		return nil, e
 	}
-	return &Handler{s, l, f, p, pf}, nil
+	c, e := template.New("catalog").ParseFS(webtemplates.FS, "layout.html", "partials/*.html")
+	if e != nil {
+		return nil, e
+	}
+	c, e = c.ParseFS(files, "templates/catalog.html")
+	if e != nil {
+		return nil, e
+	}
+	return &Handler{s: s, list: l, form: f, products: p, productForm: pf, catalog: c}, nil
 }
 func (h *Handler) RegisterRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /suppliers", h.listPage)
@@ -83,6 +98,8 @@ func (h *Handler) RegisterRoutes(m *http.ServeMux) {
 	m.HandleFunc("POST /supplier-products", h.createProduct)
 	m.HandleFunc("GET /supplier-products/{id}/edit", h.editProduct)
 	m.HandleFunc("POST /supplier-products/{id}", h.updateProduct)
+	m.HandleFunc("GET /suppliers/{id}/products", h.catalogPage)
+	m.HandleFunc("POST /suppliers/{id}/products", h.configureProducts)
 }
 func (h *Handler) listPage(w http.ResponseWriter, r *http.Request) {
 	v, e := h.s.List(r.Context(), r.URL.Query().Get("all") != "1")
@@ -154,6 +171,92 @@ func (h *Handler) productList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.render(w, h.products, "layout", productsPage{"Supplier products", "supplier-products", v})
+}
+
+func (h *Handler) catalogPage(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	supplier, err := h.s.Get(r.Context(), id)
+	if errors.Is(err, ErrSupplierNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		h.err(w, err)
+		return
+	}
+	products, err := h.s.Catalog(r.Context(), id)
+	if err != nil {
+		h.err(w, err)
+		return
+	}
+	h.render(w, h.catalog, "layout", catalogPage{Title: "Configure supplier products", ActiveNav: "suppliers", Key: fmt.Sprintf("supplier-products-%d", time.Now().UnixNano()), Supplier: supplier, Products: products, Query: r.URL.Query().Get("q")})
+}
+
+func (h *Handler) configureProducts(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	_ = r.ParseForm()
+	selected := r.Form["product_id"]
+	ids := make([]int64, 0, len(selected))
+	for _, value := range selected {
+		if productID, parseErr := parseID(value, "ProductID"); parseErr == nil {
+			ids = append(ids, productID)
+		}
+	}
+	command := ConfigureProductsCommand{SupplierID: id, ProductIDs: ids, RequestID: requestID(r), IdempotencyKey: r.FormValue("idempotency_key"), ActorID: "local-admin"}
+	result, err := h.s.ConfigureProducts(r.Context(), command)
+	if err != nil {
+		validation := ValidationErrors{}
+		switch {
+		case errors.Is(err, ErrNoProductsSelected):
+			validation["Products"] = "Select at least one unconfigured product."
+		case errors.Is(err, ErrSupplierInactive):
+			validation["Relationship"] = "This supplier is inactive and cannot be configured."
+		case errors.Is(err, ErrBulkProductInactive):
+			validation["Relationship"] = "One or more selected products are inactive. Refresh the page and try again."
+		default:
+			h.err(w, err)
+			return
+		}
+		h.renderCatalogError(w, r, id, selected, validation)
+		return
+	}
+	products, err := h.s.Catalog(r.Context(), id)
+	if err != nil {
+		h.err(w, err)
+		return
+	}
+	supplier, err := h.s.Get(r.Context(), id)
+	if err != nil {
+		h.err(w, err)
+		return
+	}
+	h.render(w, h.catalog, "layout", catalogPage{Title: "Configure supplier products", ActiveNav: "suppliers", Key: fmt.Sprintf("supplier-products-%d", time.Now().UnixNano()), Supplier: supplier, Products: products, Message: fmt.Sprintf("%d product(s) configured at PHP 0.00; %d already configured and left unchanged.", result.CreatedCount, result.SkippedCount)})
+}
+
+func (h *Handler) renderCatalogError(w http.ResponseWriter, r *http.Request, id int64, selected []string, validation ValidationErrors) {
+	supplier, err := h.s.Get(r.Context(), id)
+	if err != nil {
+		h.err(w, err)
+		return
+	}
+	products, err := h.s.Catalog(r.Context(), id)
+	if err != nil {
+		h.err(w, err)
+		return
+	}
+	selectedMap := make(map[string]bool, len(selected))
+	for _, value := range selected {
+		selectedMap[value] = true
+	}
+	h.render(w, h.catalog, "layout", catalogPage{Title: "Configure supplier products", ActiveNav: "suppliers", Key: r.FormValue("idempotency_key"), Supplier: supplier, Products: products, Errors: validation, Selected: selectedMap})
 }
 
 type productFormPage struct {

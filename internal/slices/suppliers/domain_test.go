@@ -22,3 +22,10 @@ func TestNewSupplierProductRejectsNegativeCost(t *testing.T) {
 		t.Fatalf("expected cost validation, got %v", err)
 	}
 }
+
+func TestNormalizeProductIDsRemovesInvalidAndDuplicateValues(t *testing.T) {
+	got := normalizeProductIDs([]int64{0, 4, 4, -2, 9, 4})
+	if len(got) != 2 || got[0] != 4 || got[1] != 9 {
+		t.Fatalf("unexpected normalized IDs: %v", got)
+	}
+}

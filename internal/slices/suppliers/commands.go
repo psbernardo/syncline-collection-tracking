@@ -24,6 +24,18 @@ type UpdateProductCommand struct {
 	OriginalVersion                    []byte
 	RequestID, IdempotencyKey, ActorID string
 }
+type ConfigureProductsCommand struct {
+	SupplierID     int64
+	ProductIDs     []int64
+	RequestID      string
+	IdempotencyKey string
+	ActorID        string
+}
+type ConfigureProductsResult struct {
+	CreatedCount int
+	SkippedCount int
+	CreatedIDs   []int64
+}
 type ProductOption struct {
 	ID             int64
 	SKU, Name, UOM string
@@ -51,6 +63,9 @@ func (s *Service) Get(ctx context.Context, id int64) (Supplier, error) {
 }
 func (s *Service) Products(ctx context.Context, active bool) ([]SupplierProduct, error) {
 	return s.repo.ListProducts(ctx, active)
+}
+func (s *Service) Catalog(ctx context.Context, supplierID int64) ([]SupplierCatalogProduct, error) {
+	return s.repo.ListCatalog(ctx, supplierID)
 }
 func (s *Service) GetProduct(ctx context.Context, id int64) (SupplierProduct, error) {
 	return s.repo.FindProduct(ctx, nil, id)
@@ -147,6 +162,50 @@ func (s *Service) UpdateProduct(ctx context.Context, c UpdateProductCommand) (Su
 		return audit(tx, "supplier_product", o.ID, "update", c.ActorID, c.RequestID, c.IdempotencyKey, old, o, s.now())
 	})
 	return o, e
+}
+
+func (s *Service) ConfigureProducts(ctx context.Context, c ConfigureProductsCommand) (ConfigureProductsResult, error) {
+	if c.SupplierID < 1 {
+		return ConfigureProductsResult{}, ValidationErrors{"SupplierID": "Supplier is required."}
+	}
+	ids := normalizeProductIDs(c.ProductIDs)
+	if len(ids) == 0 {
+		return ConfigureProductsResult{}, ErrNoProductsSelected
+	}
+	if c.IdempotencyKey == "" {
+		return ConfigureProductsResult{}, fmt.Errorf("idempotency key is required")
+	}
+	var result ConfigureProductsResult
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		rows, skipped, err := s.repo.ConfigureProducts(ctx, tx, c.SupplierID, ids)
+		if err != nil {
+			return err
+		}
+		result.SkippedCount = skipped
+		for _, row := range rows {
+			result.CreatedIDs = append(result.CreatedIDs, row.ID)
+		}
+		result.CreatedCount = len(result.CreatedIDs)
+		for _, row := range rows {
+			if err := audit(tx, "supplier_product", row.ID, "create", c.ActorID, c.RequestID, c.IdempotencyKey, nil, row, s.now()); err != nil {
+				return err
+			}
+		}
+		return audit(tx, "supplier", c.SupplierID, "configure_products", c.ActorID, c.RequestID, c.IdempotencyKey, nil, result, s.now())
+	})
+	return result, err
+}
+
+func normalizeProductIDs(input []int64) []int64 {
+	ids := make([]int64, 0, len(input))
+	seen := map[int64]bool{}
+	for _, id := range input {
+		if id > 0 && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 type auditRow struct {

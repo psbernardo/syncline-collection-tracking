@@ -22,4 +22,19 @@ type SearchableSelectViewModel struct {
 	Selected    string
 }
 
+// TextDateInputViewModel contains the display and canonical values for a date field.
+type TextDateInputViewModel struct {
+	ID             string
+	Name           string
+	Label          string
+	Value          string
+	CanonicalValue string
+	Placeholder    string
+	Required       bool
+	HelpID         string
+	ErrorID        string
+	Error          string
+	Picker         bool
+}
+
 type OptionsProvider func(context.Context) ([]SearchableSelectOption, error)

@@ -14,6 +14,9 @@ var (
 	ErrDuplicateSupplierProduct = errors.New("supplier product already exists")
 	ErrSupplierConflict         = errors.New("supplier was changed by another request")
 	ErrSupplierProductNotFound  = errors.New("supplier product not found")
+	ErrNoProductsSelected       = errors.New("no products selected")
+	ErrSupplierInactive         = errors.New("supplier is inactive")
+	ErrBulkProductInactive      = errors.New("one or more selected products are inactive or missing")
 )
 
 type Supplier struct {
@@ -30,6 +33,12 @@ type SupplierProduct struct {
 	IsActive                                           bool
 	UpdatedAtUTC                                       time.Time
 	RowVersion                                         []byte
+}
+type SupplierCatalogProduct struct {
+	ProductID, SupplierProductID int64
+	SKU, Name, UOM               string
+	ReferenceCost                money.Amount
+	Configured, IsActive         bool
 }
 type ValidationErrors map[string]string
 

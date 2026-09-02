@@ -17,7 +17,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 }
 
 func TestOptionsOrder(t *testing.T) {
-	want := []Code{PC, PACK, BTL, REAM, ROLL, BOX}
+	want := []Code{PC, CASE, PACK, BTL, REAM, ROLL, BOX}
 	got := Options()
 	if len(got) != len(want) {
 		t.Fatalf("got %d options, want %d", len(got), len(want))
