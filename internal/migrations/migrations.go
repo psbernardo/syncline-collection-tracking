@@ -40,6 +40,9 @@ var registry = []Migration{
 	{Version: 23, Name: "add purchase order terms and lifecycle statuses", Up: up0023, Down: down0023},
 	{Version: 24, Name: "create purchase order allocations", Up: up0024, Down: down0024},
 	{Version: 25, Name: "support multi-source and direct purchase orders", Up: up0025, Down: down0025},
+	{Version: 26, Name: "make receivable invoice optional", Up: up0026, Down: down0026},
+	{Version: 27, Name: "add CASE UOM", Up: up0027, Down: down0027},
+	{Version: 28, Name: "normalize sales order invoice lifecycle", Up: up0028, Down: down0028},
 }
 
 func Status(ctx context.Context, db *gorm.DB) error {

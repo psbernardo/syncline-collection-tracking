@@ -164,6 +164,7 @@ func (h *Handler) pdf(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+sharedpdf.SafeFilename(order.Number, "purchase-order")+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Length", strconv.Itoa(output.Len()))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(output.Bytes())
 }

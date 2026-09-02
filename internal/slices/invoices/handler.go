@@ -30,6 +30,7 @@ type conversionPage struct {
 	Title, ActiveNav, Error, InvoiceNumber string
 	Order                                  salesorders.SalesOrder
 	IdempotencyKey                         string
+	Preview                                InvoiceReceivablePreview
 }
 type detailPage struct {
 	Title, ActiveNav string
@@ -46,6 +47,7 @@ func NewHandler(orders salesorders.Repository, repo Repository) *Handler {
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /sales-orders/{id}/invoice/new", h.newConversion)
+	mux.HandleFunc("POST /sales-orders/{id}/invoice/preview", h.preview)
 	mux.HandleFunc("POST /sales-orders/{id}/invoice", h.create)
 	mux.HandleFunc("GET /invoices", h.list)
 	mux.HandleFunc("GET /invoices/{id}", h.detail)
@@ -67,6 +69,10 @@ func (h *Handler) newConversion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "This sales order has already been converted", http.StatusConflict)
 		return
 	}
+	if order.Status != salesorders.Open {
+		http.Error(w, "This sales order is not ready for invoicing", http.StatusConflict)
+		return
+	}
 	if len(order.Quotation.Lines) == 0 {
 		http.Error(w, "This sales order has no items to invoice", http.StatusConflict)
 		return
@@ -76,7 +82,7 @@ func (h *Handler) newConversion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", 500)
 		return
 	}
-	h.render(w, "form", conversionPage{Title: "Create invoice", ActiveNav: "sales-orders", Order: order, IdempotencyKey: key})
+	h.render(w, "form", conversionPage{Title: "Create invoice", ActiveNav: "sales-orders", Order: order, IdempotencyKey: key, Preview: buildPreview(order, "", time.Now().UTC())})
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -92,7 +98,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	number, numberErr := ValidateInvoiceNumber(r.FormValue("invoice_number"))
 	if numberErr != nil {
-		h.render(w, "form", conversionPage{Title: "Create invoice", ActiveNav: "sales-orders", Order: order, Error: numberErr.Error(), InvoiceNumber: strings.TrimSpace(r.FormValue("invoice_number")), IdempotencyKey: r.FormValue("idempotency_key")})
+		number := strings.TrimSpace(r.FormValue("invoice_number"))
+		h.render(w, "form", conversionPage{Title: "Create invoice", ActiveNav: "sales-orders", Order: order, Error: numberErr.Error(), InvoiceNumber: number, IdempotencyKey: r.FormValue("idempotency_key"), Preview: buildPreview(order, number, time.Now().UTC())})
 		return
 	}
 	key := r.FormValue("idempotency_key")
@@ -102,14 +109,41 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	invoice, err := h.repo.CreateFromSalesOrder(r.Context(), id, number, time.Now().UTC(), key, requestID(r), "local-admin")
 	if err != nil {
-		if errors.Is(err, ErrDuplicateInvoice) || errors.Is(err, ErrAlreadyInvoiced) || errors.Is(err, ErrInvoiceNotReady) || errors.Is(err, ErrIdempotencyConflict) {
-			h.render(w, "form", conversionPage{Title: "Create invoice", ActiveNav: "sales-orders", Order: order, Error: err.Error(), InvoiceNumber: number, IdempotencyKey: key})
+		if errors.Is(err, ErrDuplicateInvoice) || errors.Is(err, ErrAlreadyInvoiced) || errors.Is(err, ErrInvoiceNotReady) || errors.Is(err, ErrIdempotencyConflict) || errors.Is(err, ErrMixedTaxTreatment) || errors.Is(err, ErrUnsupportedTaxRule) {
+			h.render(w, "form", conversionPage{Title: "Create invoice", ActiveNav: "sales-orders", Order: order, Error: err.Error(), InvoiceNumber: number, IdempotencyKey: key, Preview: buildPreview(order, number, time.Now().UTC())})
 			return
 		}
 		http.Error(w, "Internal server error", 500)
 		return
 	}
 	http.Redirect(w, r, "/invoices/"+strconv.FormatInt(invoice.ID, 10), http.StatusSeeOther)
+}
+
+func (h *Handler) preview(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	order, err := h.orders.FindByID(r.Context(), id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if order.Status == salesorders.Converted {
+		http.Error(w, "This sales order has already been converted", http.StatusConflict)
+		return
+	}
+	if order.Status != salesorders.Open || len(order.Quotation.Lines) == 0 {
+		http.Error(w, "This sales order is not ready for invoicing", http.StatusConflict)
+		return
+	}
+	number, err := ValidateInvoiceNumber(r.FormValue("invoice_number"))
+	if err != nil {
+		h.render(w, "form", conversionPage{Title: "Create invoice", ActiveNav: "sales-orders", Order: order, Error: err.Error(), InvoiceNumber: strings.TrimSpace(r.FormValue("invoice_number")), IdempotencyKey: r.FormValue("idempotency_key"), Preview: buildPreview(order, strings.TrimSpace(r.FormValue("invoice_number")), time.Now().UTC())})
+		return
+	}
+	h.render(w, "form", conversionPage{Title: "Create invoice", ActiveNav: "sales-orders", Order: order, InvoiceNumber: number, IdempotencyKey: r.FormValue("idempotency_key"), Preview: buildPreview(order, number, time.Now().UTC())})
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -145,9 +179,9 @@ func (h *Handler) pdf(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	document := InvoicePDFDocument{Seller: sharedpdf.DefaultSeller(), Number: invoice.Number, SalesOrderNumber: invoice.SalesOrderNumber, CustomerPO: invoice.CustomerPONumber, SalesPerson: invoice.SalesPerson, Customer: invoice.CustomerName, BillingAddress: invoice.BillingAddress, DeliveryAddress: invoice.DeliveryAddress, ContactPerson: invoice.ContactPerson, ContactNumber: invoice.ContactNumber, Email: invoice.Email, TermsDays: invoice.TermsDays, InvoiceDate: invoice.InvoiceDateUTC, DueDate: invoice.DueDateUTC, Subtotal: invoice.Subtotal, Tax: invoice.Tax, Total: invoice.Total}
+	document := InvoicePDFDocument{Seller: sharedpdf.DefaultSeller(), Number: invoice.Number, SalesOrderNumber: invoice.SalesOrderNumber, CustomerPO: invoice.CustomerPONumber, SalesPerson: invoice.SalesPerson, Customer: invoice.CustomerName, BillingAddress: invoice.BillingAddress, DeliveryAddress: invoice.DeliveryAddress, ContactPerson: invoice.ContactPerson, ContactNumber: invoice.ContactNumber, Email: invoice.Email, TermsDays: invoice.TermsDays, InvoiceDate: invoice.InvoiceDateUTC, DueDate: invoice.DueDateUTC, Subtotal: invoice.Subtotal, Tax: invoice.Tax, Total: invoice.Total, VatableSales: nonZeroAmountPointer(invoice.Subtotal), TotalAmountDue: amountPointer(invoice.Total)}
 	for _, line := range invoice.Lines {
-		document.Lines = append(document.Lines, InvoicePDFLine{SKU: line.SKU, Name: line.Name, UOM: line.UOM, Quantity: line.Quantity, UnitPrice: line.UnitPrice, Amount: line.VATInclusiveTotal, TaxRate: line.TaxRate})
+		document.Lines = append(document.Lines, InvoicePDFLine{SKU: line.SKU, Name: line.Name, UOM: line.UOM, Quantity: line.Quantity, UnitPrice: line.UnitPrice, Amount: line.LineTotal, TaxRate: line.TaxRate})
 	}
 	var output bytes.Buffer
 	if err := NewInvoicePDFRenderer().Render(&output, document); err != nil {
@@ -155,8 +189,9 @@ func (h *Handler) pdf(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+safeFilename(invoice.Number)+`"`)
+	w.Header().Set("Content-Disposition", `inline; filename="`+safeFilename(invoice.Number)+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Length", strconv.Itoa(output.Len()))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(output.Bytes())
 }

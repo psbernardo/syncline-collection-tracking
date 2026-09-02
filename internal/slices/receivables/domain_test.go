@@ -123,7 +123,7 @@ func TestNewDeliveryReceivableCalculatesDueDate(t *testing.T) {
 }
 
 func TestNewDeliveryReceivableRejectsInvalidInput(t *testing.T) {
-	_, err := NewDeliveryReceivable(0, "", "PO-123", "-1", "bad-date", 121)
+	_, err := NewDeliveryReceivable(0, "INV-123", "PO-123", "-1", "bad-date", 121)
 	validation, ok := err.(ValidationErrors)
 	if !ok {
 		t.Fatalf("error type = %T, want ValidationErrors", err)
@@ -162,6 +162,9 @@ func TestValidatePaymentDate(t *testing.T) {
 	now, _ := time.Parse(time.RFC3339, "2026-08-15T02:00:00Z")
 	if _, err := ValidatePaymentDate(receivable, "2026-08-10", now); err != nil {
 		t.Fatalf("delivery date payment should be valid: %v", err)
+	}
+	if _, err := ValidatePaymentDate(receivable, "08/11/2026", now); err != nil {
+		t.Fatalf("display-formatted payment date should be valid: %v", err)
 	}
 	for _, input := range []string{"2026-08-09", "2026-08-16", "invalid"} {
 		if _, err := ValidatePaymentDate(receivable, input, now); err == nil {

@@ -9,13 +9,13 @@ import (
 )
 
 type InvoiceOption struct {
-	ID               int64
-	Number           string
-	CompanyAccountID int64
-	CompanyName      string
-	InvoiceDateUTC   time.Time
-	TotalScaled      int64
-	Status           string
+	ID               int64     `gorm:"column:invoice_id"`
+	Number           string    `gorm:"column:invoice_number"`
+	CompanyAccountID int64     `gorm:"column:company_account_id"`
+	CompanyName      string    `gorm:"column:company_name"`
+	InvoiceDateUTC   time.Time `gorm:"column:invoice_date_utc"`
+	TotalScaled      int64     `gorm:"column:total_scaled"`
+	Status           string    `gorm:"column:status"`
 }
 
 type InvoiceRepository interface {

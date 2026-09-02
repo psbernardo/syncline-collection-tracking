@@ -13,7 +13,7 @@ func TestSalesOrderPDFRendererUsesOrderDocumentContract(t *testing.T) {
 		Number: "SO-00000003", Source: "QT-00000024", CustomerPO: "CUSTOMER-PO-2026-000001",
 		SalesPerson: "Alma Mae Bernardo", Customer: "Customer", BillingAddress: "Billing address", DeliveryAddress: "Delivery address",
 		TermsDays: 30, OrderDate: time.Date(2026, time.August, 23, 0, 0, 0, 0, time.UTC),
-		Lines: []SalesOrderPDFLine{{SKU: "SKU-1", Name: "Order product", UOM: "PC", Quantity: money.Amount(20000), UnitPrice: money.Amount(10000), Amount: money.Amount(22400), TaxRate: 120000}},
+		Lines: []SalesOrderPDFLine{{SKU: "SKU-1", Name: "Order product", UOM: "PC", Quantity: money.Amount(20000), UnitPrice: money.Amount(10000), Amount: money.Amount(20000), TaxRate: 120000}},
 	}
 	var output bytes.Buffer
 	if err := NewSalesOrderPDFRenderer().Render(&output, document); err != nil {

@@ -523,7 +523,7 @@ func (h *Handler) pdf(w http.ResponseWriter, r *http.Request) {
 	}
 	document := SalesOrderPDFDocument{Seller: sharedpdf.DefaultSeller(), Number: order.Number, Source: quotationReference, CustomerPO: order.CustomerPONumber, SalesPerson: order.SalesPerson, Customer: order.Quotation.CompanyName, BillingAddress: order.Quotation.CustomerAddress, DeliveryAddress: order.Quotation.CustomerDeliveryAddress, TermsDays: order.Quotation.TermsDays, OrderDate: order.CreatedAtUTC, Subtotal: order.Quotation.Totals.Subtotal, Tax: order.Quotation.Totals.Tax, Total: order.Quotation.Totals.Total}
 	for _, line := range order.Quotation.Lines {
-		document.Lines = append(document.Lines, SalesOrderPDFLine{SKU: line.ProductSKU, Name: line.ProductName, UOM: line.UOM, TaxCode: line.TaxCode, Quantity: line.Quantity, UnitPrice: line.UnitPrice, Amount: line.VATInclusiveTotal, TaxRate: line.TaxRate})
+		document.Lines = append(document.Lines, SalesOrderPDFLine{SKU: line.ProductSKU, Name: line.ProductName, UOM: line.UOM, TaxCode: line.TaxCode, Quantity: line.Quantity, UnitPrice: line.UnitPrice, Amount: line.LineTotal, TaxRate: line.TaxRate})
 	}
 	var output bytes.Buffer
 	if err := NewSalesOrderPDFRenderer().Render(&output, document); err != nil {
@@ -533,6 +533,7 @@ func (h *Handler) pdf(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+safeFilename(order.Number)+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Length", strconv.Itoa(output.Len()))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(output.Bytes())
 }

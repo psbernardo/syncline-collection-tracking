@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -96,7 +97,7 @@ func TestPurchaseOrderPDFDownload(t *testing.T) {
 	h.RegisterRoutes(mux)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/purchase-orders/3/pdf", nil))
-	if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "application/pdf" || !strings.Contains(w.Header().Get("Content-Disposition"), "PO-20260823-0001.pdf") || w.Header().Get("X-Content-Type-Options") != "nosniff" || !strings.HasPrefix(w.Body.String(), "%PDF-") {
+	if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "application/pdf" || !strings.Contains(w.Header().Get("Content-Disposition"), "PO-20260823-0001.pdf") || w.Header().Get("X-Content-Type-Options") != "nosniff" || !strings.HasPrefix(w.Body.String(), "%PDF-") || !strings.HasSuffix(strings.TrimSpace(w.Body.String()), "%%EOF") || w.Header().Get("Content-Length") != strconv.Itoa(w.Body.Len()) {
 		t.Fatalf("unexpected PDF response: status=%d headers=%v", w.Code, w.Header())
 	}
 }

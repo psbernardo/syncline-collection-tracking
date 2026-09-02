@@ -19,6 +19,7 @@ type InvoicePDFDocument struct {
 	InvoiceDate, DueDate                                                                         time.Time
 	Lines                                                                                        []InvoicePDFLine
 	Subtotal, Tax, Total                                                                         money.Amount
+	VatableSales, ZeroRatedSales, VATExemptSales, Discount, WithholdingTax, TotalAmountDue       *money.Amount
 }
 
 type InvoicePDFLine struct {
@@ -37,7 +38,7 @@ const (
 	invoiceContinuationTableY = 35.0
 	invoiceDescriptionWidth   = 205.0
 	invoiceFooterGap          = 3 * 28.35
-	invoiceTotalsHeight       = 48.0
+	invoiceTotalsHeight       = 96.0
 	invoiceFooterSpacing      = 24.0
 	invoiceFooterHeight       = 42.0
 	invoiceMetadataLabelWidth = 98.0
@@ -190,11 +191,67 @@ func (p invoicePage) line(y, height float64, number int, line InvoicePDFLine, de
 }
 
 func (p invoicePage) totals(y float64) {
-	for _, row := range []struct{ label, value string }{{"TOTAL SALES (VAT INC)", sharedpdf.FormatAmount(p.document.Total)}, {"LESS: VAT", sharedpdf.FormatAmount(p.document.Tax)}, {"AMOUNT: NET OF VAT", sharedpdf.FormatAmount(p.document.Subtotal)}} {
-		sharedpdf.Text(p.pdf, 305, y, 9, row.label, 170, gopdf.Left, "B", sharedpdf.Purple)
-		sharedpdf.Text(p.pdf, 480, y, 9, row.value, 90, gopdf.Right, "B", sharedpdf.Purple)
+	vatableSales := p.document.VatableSales
+	if vatableSales == nil && p.document.Tax != 0 {
+		vatableSales = amountPointer(p.document.Subtotal)
+	}
+	totalAmountDue := p.document.TotalAmountDue
+	if totalAmountDue == nil {
+		totalAmountDue = amountPointer(p.document.Total)
+	}
+	left := []struct {
+		label string
+		value *money.Amount
+	}{
+		{"Vatable Sales:", vatableSales},
+		{"Vat:", nonZeroAmountPointer(p.document.Tax)},
+		{"Zero-Rated Sales:", p.document.ZeroRatedSales},
+		{"Vat-Exempt Sales:", p.document.VATExemptSales},
+	}
+	right := []struct {
+		label string
+		value *money.Amount
+	}{
+		{"Total Sales:", amountPointer(p.document.Total)},
+		{"Less: VAT:", nonZeroAmountPointer(p.document.Tax)},
+		{"Less: Discount:", p.document.Discount},
+		{"Add Vat:", nonZeroAmountPointer(p.document.Tax)},
+		{"Less: Withholding Tax:", p.document.WithholdingTax},
+		{"Total amount due:", totalAmountDue},
+	}
+	for index, row := range left {
+		sharedpdf.Text(p.pdf, 30, y, 9, row.label, 125, gopdf.Left, "B", sharedpdf.Purple)
+		sharedpdf.Text(p.pdf, 155, y, 9, formatOptionalAmount(row.value), 95, gopdf.Right, "B", sharedpdf.Purple)
+		if index < len(right) {
+			other := right[index]
+			sharedpdf.Text(p.pdf, 300, y, 9, other.label, 175, gopdf.Left, "B", sharedpdf.Purple)
+			sharedpdf.Text(p.pdf, 480, y, 9, formatOptionalAmount(other.value), 90, gopdf.Right, "B", sharedpdf.Purple)
+		}
 		y += 16
 	}
+	for _, row := range right[len(left):] {
+		sharedpdf.Text(p.pdf, 300, y, 9, row.label, 175, gopdf.Left, "B", sharedpdf.Purple)
+		sharedpdf.Text(p.pdf, 480, y, 9, formatOptionalAmount(row.value), 90, gopdf.Right, "B", sharedpdf.Purple)
+		y += 16
+	}
+}
+
+func amountPointer(value money.Amount) *money.Amount {
+	return &value
+}
+
+func nonZeroAmountPointer(value money.Amount) *money.Amount {
+	if value == 0 {
+		return nil
+	}
+	return amountPointer(value)
+}
+
+func formatOptionalAmount(value *money.Amount) string {
+	if value == nil {
+		return ""
+	}
+	return sharedpdf.FormatAmount(*value)
 }
 
 func (p invoicePage) footer(y float64) {

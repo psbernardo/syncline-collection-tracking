@@ -66,7 +66,7 @@ func NewHandler(repo Repository, providers ...interface{}) (*Handler, error) {
 			productOptions = webtemplates.OptionsProvider(value)
 		}
 	}
-	functions := template.FuncMap{"dict": templateDict, "taxRate": formatTaxRate, "taxLabel": TaxLabel, "percent": formatPercent, "quotationDate": formatQuotationDate, "quotationDateInput": formatQuotationDateInput}
+	functions := template.FuncMap{"dict": templateDict, "taxRate": formatTaxRate, "taxLabel": TaxLabel, "percent": formatPercent, "quotationDate": formatQuotationDate, "quotationDateInput": formatQuotationDateInput, "quotationDateCanonical": formatQuotationDateCanonical}
 	l, err := template.New("list").Funcs(functions).ParseFS(webtemplates.FS, "layout.html", "partials/*.html")
 	if err != nil {
 		return nil, err
@@ -119,7 +119,7 @@ func (h *Handler) listPage(w http.ResponseWriter, r *http.Request) {
 	h.render(w, h.list, listPage{"Quotations", "quotations", values})
 }
 func (h *Handler) newPage(w http.ResponseWriter, r *http.Request) {
-	quotation := Quotation{Status: Draft, Lines: []Line{}}
+	quotation := Quotation{Status: Draft, TaxDefaultCode: TaxVAT12, Lines: []Line{}}
 	if h.numberGenerator != nil {
 		number, err := h.numberGenerator.NextNumber(r.Context())
 		if err != nil {
@@ -189,6 +189,7 @@ func (h *Handler) pdf(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Length", strconv.Itoa(output.Len()))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(output.Bytes())
 }
@@ -434,6 +435,13 @@ func formatQuotationDateInput(value *time.Time) string {
 		return ""
 	}
 	return formatQuotationDate(*value)
+}
+
+func formatQuotationDateCanonical(value *time.Time) string {
+	if value == nil {
+		return ""
+	}
+	return value.Format("2006-01-02")
 }
 
 func parseValidityDate(value string) (time.Time, error) {

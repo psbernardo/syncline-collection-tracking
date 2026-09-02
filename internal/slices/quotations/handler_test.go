@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -127,6 +128,9 @@ func TestQuotationDateFormattingUsesStandardFormat(t *testing.T) {
 	if got := formatQuotationDateInput(nil); got != "" {
 		t.Fatalf("expected empty quotation date input, got %q", got)
 	}
+	if got := formatQuotationDateCanonical(&value); got != "2099-12-31" {
+		t.Fatalf("unexpected canonical quotation date: %q", got)
+	}
 }
 
 func TestQuotationEditFormUsesStandardDateValue(t *testing.T) {
@@ -143,6 +147,9 @@ func TestQuotationEditFormUsesStandardDateValue(t *testing.T) {
 	body := w.Body.String()
 	if !strings.Contains(body, `value="12/31/2099"`) {
 		t.Fatalf("quotation edit form did not render the standard date: %s", body)
+	}
+	if !strings.Contains(body, `name="validity_date" value="2099-12-31"`) {
+		t.Fatalf("quotation edit form did not render the canonical date: %s", body)
 	}
 	for _, expected := range []string{`data-date-display`, `data-date-picker`, `data-date-picker-trigger`, `type="date"`} {
 		if !strings.Contains(body, expected) {
@@ -162,7 +169,7 @@ func TestQuotationFormUsesSearchableRelationshipSelectors(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.newPage(w, httptest.NewRequest("GET", "/quotations/new", nil))
 	body := w.Body.String()
-	for _, expected := range []string{"QT-00000001", "Search customer...", "ACME - Widget (PC)", "Long widget description", "Quoted items", "quotation-row-template", "class=\"product-cell\" colspan=\"2\"", "quotation-line-profitability", "Cost &amp; profit", "data-field=\"supplier-cost\"", "quotation-grid-value"} {
+	for _, expected := range []string{"QT-00000001", "Search customer...", "ACME - Widget (PC)", "Long widget description", "Quoted items", "quotation-row-template", "class=\"product-cell\" colspan=\"2\"", "quotation-line-profitability", "Cost &amp; profit", "data-field=\"supplier-cost\"", "quotation-grid-value", `value="VAT12" selected`, "VAT-inclusive, 12% VAT"} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("quotation form does not contain %q", expected)
 		}
@@ -226,8 +233,11 @@ func TestQuotationPDFDownloadReturnsPDFAttachment(t *testing.T) {
 	if got := w.Header().Get("Content-Disposition"); got != `attachment; filename="QT-00000007.pdf"` {
 		t.Fatalf("unexpected content disposition: %q", got)
 	}
-	if !bytes.HasPrefix(w.Body.Bytes(), []byte("%PDF-")) {
+	if !bytes.HasPrefix(w.Body.Bytes(), []byte("%PDF-")) || !bytes.HasSuffix(bytes.TrimSpace(w.Body.Bytes()), []byte("%%EOF")) {
 		t.Fatalf("response is not a PDF: %q", w.Body.Bytes()[:minInt(12, len(w.Body.Bytes()))])
+	}
+	if got := w.Header().Get("Content-Length"); got != strconv.Itoa(w.Body.Len()) {
+		t.Fatalf("unexpected content length: header=%q body=%d", got, w.Body.Len())
 	}
 }
 

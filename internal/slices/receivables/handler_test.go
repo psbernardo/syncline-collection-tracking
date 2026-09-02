@@ -26,8 +26,14 @@ func TestNewReceivableFormRendersAccounts(t *testing.T) {
 	if !strings.Contains(recorder.Body.String(), "Acme Corp") {
 		t.Fatal("company option was not rendered")
 	}
-	if !strings.Contains(recorder.Body.String(), `name="invoice_id"`) || strings.Contains(recorder.Body.String(), `name="invoice_number"`) || !strings.Contains(recorder.Body.String(), "INV001") {
-		t.Fatal("invoice selection field was not rendered")
+	if !strings.Contains(recorder.Body.String(), `name="invoice_id"`) || !strings.Contains(recorder.Body.String(), `name="invoice_number"`) || !strings.Contains(recorder.Body.String(), "INV001") {
+		t.Fatal("invoice fields were not rendered")
+	}
+	if !strings.Contains(recorder.Body.String(), `data-invoice-number="INV001"`) || !strings.Contains(recorder.Body.String(), "No invoice selected") {
+		t.Fatal("invoice selection does not expose the invoice number")
+	}
+	if !strings.Contains(recorder.Body.String(), `>INV001</option>`) || strings.Contains(recorder.Body.String(), `>INV001 - Acme Corp</option>`) {
+		t.Fatal("linked invoice dropdown should display only the invoice number")
 	}
 	for _, expected := range []string{`id="receivable-tax-preview"`, `hx-get="/receivables/tax-preview"`, `hx-trigger="input changed delay:300ms, change"`, `hx-include="#tax_rule_code"`, `hx-include="#amount"`} {
 		if !strings.Contains(recorder.Body.String(), expected) {
@@ -111,6 +117,24 @@ func TestInvalidReceivableCreateReturnsHTMXFragment(t *testing.T) {
 	}
 }
 
+func TestInvalidReceivableCreatePreservesManualInvoiceNumber(t *testing.T) {
+	handler, err := NewHandler(NewService(nil, &fakeReceivableRepository{}, &fakeAccountRepository{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/receivables", strings.NewReader("company_account_id=1&invoice_number=MANUAL123&po_number=PO123&amount=invalid&delivery_date=2026-08-10&payment_term_days=5&idempotency_key=test"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("HX-Request", "true")
+	handler.create(recorder, request)
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnprocessableEntity)
+	}
+	if !strings.Contains(recorder.Body.String(), `name="invoice_number"`) || !strings.Contains(recorder.Body.String(), `value="MANUAL123"`) {
+		t.Fatal("manual invoice number was not preserved")
+	}
+}
+
 func TestReceivableListRendersMultiSelectStatusFilter(t *testing.T) {
 	handler, err := NewHandler(NewService(nil, &fakeReceivableRepository{}, &fakeAccountRepository{}))
 	if err != nil {
@@ -178,7 +202,7 @@ func TestReceivableListLoadMoreReturnsRowsAndReplacementSentinel(t *testing.T) {
 	if strings.Contains(body, `id="receivable-results"`) || strings.Contains(body, "<section") {
 		t.Fatal("load-more response rendered the full results section")
 	}
-	for _, expected := range []string{"PO-next", "hx-trigger=\"revealed\"", "load_more=1", "invoice=0220", "status=overdue", "page_size=5"} {
+	for _, expected := range []string{"PO-next", "₱0.02", "hx-trigger=\"revealed\"", "load_more=1", "invoice=0220", "status=overdue", "page_size=5"} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("load-more response does not contain %q", expected)
 		}
@@ -255,7 +279,7 @@ func TestReceivablePaymentPageRendersConfirmationWorkflow(t *testing.T) {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
 	}
 	body := recorder.Body.String()
-	for _, expected := range []string{"Acknowledge full payment", "Receivable summary", "₱0.01", `name="payment_date"`, "Payment received date", "Full payment only", "normal financial editing"} {
+	for _, expected := range []string{"Acknowledge full payment", "Receivable summary", "₱0.01", `id="payment-received-date-display"`, `name="payment_date"`, `data-date-canonical`, `placeholder="MM/DD/YYYY"`, "Payment received date", "Full payment only", "normal financial editing"} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("detail does not contain %q", expected)
 		}
@@ -358,7 +382,7 @@ func (*loadMoreReceivableRepository) List(context.Context) ([]DeliveryReceivable
 }
 
 func (*loadMoreReceivableRepository) ListFiltered(context.Context, ListQuery) ([]DeliveryReceivable, int64, error) {
-	return []DeliveryReceivable{{ID: 2, CompanyName: "Acme Corp", InvoiceNumber: "0220", PONumber: "PO-next", DeliveryDateUTC: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), DueDateUTC: time.Date(2026, 8, 14, 0, 0, 0, 0, time.UTC), PaymentTermDays: 5, AmountDue: 100, LifecycleStatus: "Active", RowVersion: []byte("version")}}, 2, nil
+	return []DeliveryReceivable{{ID: 2, CompanyName: "Acme Corp", InvoiceNumber: "0220", PONumber: "PO-next", DeliveryDateUTC: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), DueDateUTC: time.Date(2026, 8, 14, 0, 0, 0, 0, time.UTC), PaymentTermDays: 5, AmountDue: 100, GrossAmount: 200, LifecycleStatus: "Active", RowVersion: []byte("version")}}, 2, nil
 }
 
 func (*loadMoreReceivableRepository) Update(context.Context, *gorm.DB, DeliveryReceivable, []byte) (DeliveryReceivable, error) {

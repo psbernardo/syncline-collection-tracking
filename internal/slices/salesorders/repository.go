@@ -16,7 +16,6 @@ type Status string
 
 const (
 	Open      Status = "OPEN"
-	Completed Status = "COMPLETED"
 	Converted Status = "CONVERTED"
 )
 
@@ -70,6 +69,8 @@ type StandaloneOrderInput struct {
 
 type SalesOrder struct {
 	ID               int64
+	InvoiceID        int64
+	InvoiceNumber    string
 	Number           string
 	QuotationID      int64
 	QuotationNumber  string
@@ -612,12 +613,13 @@ func (r *GormRepository) FindByID(ctx context.Context, id int64) (SalesOrder, er
 	q.CompanyAccountID, q.CompanyName, q.CustomerAddress, q.CustomerDeliveryAddress, q.CustomerContactPerson, q.CustomerContactNumber, q.CustomerEmail = m.AccountID, account.Name, account.Address, account.DeliveryAddress, account.ContactPerson, account.ContactNumber, account.Email
 	if m.QuotationID != nil {
 		var source struct {
-			Number string `gorm:"column:quotation_number"`
+			Number         string `gorm:"column:quotation_number"`
+			TaxDefaultCode string `gorm:"column:tax_default_code"`
 		}
-		if err := r.db.WithContext(ctx).Table("dbo.quotations").Select("quotation_number").Where("quotation_id = ?", *m.QuotationID).Scan(&source).Error; err != nil {
+		if err := r.db.WithContext(ctx).Table("dbo.quotations").Select("quotation_number, tax_default_code").Where("quotation_id = ?", *m.QuotationID).Scan(&source).Error; err != nil {
 			return SalesOrder{}, err
 		}
-		q.Number = source.Number
+		q.Number, q.TaxDefaultCode = source.Number, source.TaxDefaultCode
 	}
 	q.TermsDays, q.CreatedAtUTC = m.TermsDays, m.CreatedAt
 	q.Totals = quotations.Totals{Subtotal: money.Amount(m.Subtotal), Tax: money.Amount(m.Tax), Total: money.Amount(m.Total)}
@@ -628,7 +630,14 @@ func (r *GormRepository) FindByID(ctx context.Context, id int64) (SalesOrder, er
 	for _, line := range lines {
 		q.Lines = append(q.Lines, quotations.Line{ID: line.ID, ProductID: line.ProductID, ProductSKU: line.SKU, ProductName: line.Name, Quantity: money.Amount(line.Quantity), UOM: line.UOM, UnitPrice: money.Amount(line.UnitPrice), TaxRate: line.TaxRate, TaxCode: line.TaxCode, LineTotal: money.Amount(line.LineTotal), VATInclusiveTotal: money.Amount(line.Inclusive), TaxAmount: money.Amount(line.Inclusive - line.LineTotal)})
 	}
-	return SalesOrder{ID: m.ID, Number: m.Number, QuotationID: sourceID(m.QuotationID), QuotationNumber: q.Number, CustomerPONumber: m.PONumber, SalesPerson: m.SalesPerson, Status: m.Status, CreatedAtUTC: m.CreatedAt, Quotation: q}, nil
+	var invoice struct {
+		ID     int64  `gorm:"column:invoice_id"`
+		Number string `gorm:"column:invoice_number"`
+	}
+	if err := r.db.WithContext(ctx).Table("dbo.invoices").Select("invoice_id, invoice_number").Where("sales_order_id = ?", id).Scan(&invoice).Error; err != nil {
+		return SalesOrder{}, err
+	}
+	return SalesOrder{ID: m.ID, InvoiceID: invoice.ID, InvoiceNumber: invoice.Number, Number: m.Number, QuotationID: sourceID(m.QuotationID), QuotationNumber: q.Number, CustomerPONumber: m.PONumber, SalesPerson: m.SalesPerson, Status: m.Status, CreatedAtUTC: m.CreatedAt, Quotation: q}, nil
 }
 
 func (r *GormRepository) List(ctx context.Context) ([]SalesOrder, error) {

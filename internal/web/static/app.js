@@ -129,6 +129,80 @@ window.catalogSelection = function () {
   };
 };
 
+window.textDateInput = function () {
+  return {
+    initialize() {
+      const display = this.$root.querySelector("[data-date-display]");
+      const canonical = this.$root.querySelector("[data-date-canonical]");
+      const picker = this.$root.querySelector("[data-date-picker]");
+      const trigger = this.$root.querySelector("[data-date-picker-trigger]");
+      if (!display || !canonical) return;
+
+      if (canonical.value && /^\d{4}-\d{2}-\d{2}$/.test(canonical.value)) {
+        display.value = this.isoToDisplay(canonical.value);
+      } else {
+        display.value = this.format(display.value).value;
+      }
+      this.sync();
+      display.addEventListener("input", () => this.formatInput(display));
+      display.addEventListener("blur", () => { this.formatInput(display); this.sync(); });
+      if (picker) picker.addEventListener("change", () => {
+        display.value = this.isoToDisplay(picker.value);
+        this.sync();
+      });
+      if (trigger && picker) trigger.addEventListener("click", () => {
+        if (typeof picker.showPicker === "function") picker.showPicker();
+        else picker.click();
+      });
+    },
+    format(value, caret) {
+      const beforeCaret = typeof caret === "number" ? value.slice(0, caret).replace(/\D/g, "").length : null;
+      const digits = value.replace(/\D/g, "").slice(0, 8);
+      let formatted = digits;
+      if (digits.length > 2) formatted = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+      if (digits.length > 4) formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+      if (beforeCaret === null) return { value: formatted };
+      let position = 0;
+      let seen = 0;
+      while (position < formatted.length && seen < beforeCaret) {
+        if (/\d/.test(formatted[position])) seen++;
+        position++;
+      }
+      return { value: formatted, caret: position };
+    },
+    formatInput(display) {
+      const formatted = this.format(display.value, display.selectionStart);
+      display.value = formatted.value;
+      if (typeof formatted.caret === "number") display.setSelectionRange(formatted.caret, formatted.caret);
+      this.sync();
+    },
+    sync() {
+      const display = this.$root.querySelector("[data-date-display]");
+      const canonical = this.$root.querySelector("[data-date-canonical]");
+      const picker = this.$root.querySelector("[data-date-picker]");
+      if (!display || !canonical) return;
+      const iso = this.displayToISO(display.value);
+      canonical.value = iso;
+      if (picker) picker.value = iso;
+      canonical.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    displayToISO(value) {
+      const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (!match) return "";
+      const month = Number(match[1]);
+      const day = Number(match[2]);
+      const year = Number(match[3]);
+      const date = new Date(Date.UTC(year, month - 1, day));
+      if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
+      return `${match[3]}-${match[1]}-${match[2]}`;
+    },
+    isoToDisplay(value) {
+      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      return match ? `${match[2]}/${match[3]}/${match[1]}` : "";
+    },
+  };
+};
+
 window.quotationForm = function () {
   return {
     lineCount: 0,
@@ -136,48 +210,9 @@ window.quotationForm = function () {
     initialize() {
       this.lineCount = document.querySelectorAll("#quotation-lines [data-line]").length;
       this.quotationTax = this.$root.querySelector("[name='tax_default_code']")?.value || "NONE";
-      this.initializeDatePicker();
       this.ensureBlankRow();
       this.refreshRows();
       this.refreshSummary();
-    },
-    initializeDatePicker() {
-      const display = this.$root.querySelector("[data-date-display]");
-      const picker = this.$root.querySelector("[data-date-picker]");
-      const trigger = this.$root.querySelector("[data-date-picker-trigger]");
-      if (!display || !picker || !trigger) return;
-      display.addEventListener("input", () => this.syncDatePicker());
-      display.addEventListener("blur", () => this.syncDatePicker());
-      picker.addEventListener("change", () => {
-        display.value = this.formatDatePickerValue(picker.value);
-      });
-      trigger.addEventListener("click", () => {
-        if (typeof picker.showPicker === "function") picker.showPicker();
-        else picker.click();
-      });
-    },
-    syncDatePicker() {
-      const display = this.$root.querySelector("[data-date-display]");
-      const picker = this.$root.querySelector("[data-date-picker]");
-      if (!display || !picker) return;
-      const match = display.value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-      if (!match) {
-        picker.value = "";
-        return;
-      }
-      const month = Number(match[1]);
-      const day = Number(match[2]);
-      const year = Number(match[3]);
-      const date = new Date(Date.UTC(year, month - 1, day));
-      if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
-        picker.value = "";
-        return;
-      }
-      picker.value = `${match[3]}-${match[1]}-${match[2]}`;
-    },
-    formatDatePickerValue(value) {
-      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      return match ? `${match[2]}/${match[3]}/${match[1]}` : "";
     },
     ensureBlankRow() {
       const rows = document.querySelectorAll("#quotation-lines [data-line]");
@@ -287,16 +322,27 @@ window.salesOrderForm = function () {
       this.refresh();
     },
     removeLine(row) {
+      const rows = Array.from(this.$root.querySelectorAll("[data-order-line]"));
+      const index = rows.indexOf(row);
+      if (index >= 0) this.$root.querySelectorAll("#order-line-prices [data-unit-price]")[index]?.remove();
       row?.remove();
       this.refresh();
     },
     refresh() {
       let total = 0;
+      let taxRate = 0;
+      const prices = Array.from(this.$root.querySelectorAll("#order-line-prices [data-unit-price]"));
       let count = 0;
-      this.$root.querySelectorAll("[data-order-line]").forEach((row) => {
+      const rows = Array.from(this.$root.querySelectorAll("[data-order-line]"));
+      rows.forEach((row, index) => {
         const quantity = Number(row.querySelector("input[name$='.quantity']")?.value || 0);
-        const price = Number(row.querySelector("input[name$='.unit_price']")?.value || 0);
-        total += quantity * price;
+        const priceInfo = prices[index];
+        const price = Number(row.querySelector("input[name$='.unit_price']")?.value || row.dataset.rate || priceInfo?.dataset.unitPrice || 0);
+        const lineTotal = quantity * price;
+        const storedTaxRate = Number(row.querySelector("input[name$='.tax_rate']")?.value || priceInfo?.dataset.taxRate || 0);
+        const lineTaxRate = storedTaxRate > 100 ? storedTaxRate / 10000 : storedTaxRate;
+        total += lineTotal;
+        if (lineTaxRate > 0) taxRate = lineTaxRate;
         if (quantity > 0) count++;
         const amount = row.querySelector("[data-amount]");
         if (amount) amount.textContent = this.money(quantity * price);
@@ -311,7 +357,12 @@ window.salesOrderForm = function () {
       const countOutput = this.$root.querySelector("[data-count]");
       const submit = this.$root.querySelector("[data-submit]");
       const acknowledgement = this.$root.querySelector("[name='edit_acknowledged']");
+      const vat = taxRate > 0 ? total - total / (1 + taxRate / 100) : 0;
       if (output) output.textContent = this.money(total);
+      const vatOutput = this.$root.querySelector("[data-vat]");
+      const netOutput = this.$root.querySelector("[data-net]");
+      if (vatOutput) vatOutput.textContent = this.money(vat);
+      if (netOutput) netOutput.textContent = this.money(total - vat);
       if (countOutput) countOutput.textContent = `${count} line${count === 1 ? "" : "s"} selected`;
       if (submit) submit.disabled = count === 0 || (acknowledgement && !acknowledgement.checked);
     },
@@ -620,6 +671,55 @@ window.searchableSelect = function () {
         this.close();
         this.$root.querySelector(".searchable-select-input")?.focus();
       }
+    },
+  };
+};
+
+window.receivableInvoiceForm = function () {
+  return {
+    invoiceID: "",
+    invoiceNumber: "",
+    initialize() {
+      const select = this.$root.querySelector("#invoice_id");
+      const input = this.$root.querySelector("#invoice_number");
+      if (!select || !input) return;
+      this.invoiceID = select.value;
+      this.invoiceNumber = input.value.trim();
+      if (this.invoiceID) {
+        this.copyInvoiceNumber(select, input);
+        return;
+      }
+      const matching = Array.from(select.options).find((option) => option.dataset.invoiceNumber === this.invoiceNumber);
+      if (matching) {
+        select.value = matching.value;
+        this.invoiceID = matching.value;
+      }
+    },
+    invoiceChanged(event) {
+      if (event.target?.id !== "invoice_id") return;
+      const input = this.$root.querySelector("#invoice_number");
+      if (!input) return;
+      this.invoiceID = event.target.value;
+      if (this.invoiceID) {
+        this.copyInvoiceNumber(event.target, input);
+      } else {
+        this.invoiceNumber = "";
+        input.value = "";
+      }
+    },
+    invoiceNumberChanged(event) {
+      if (event.target?.id !== "invoice_number" || this.invoiceID) return;
+      const select = this.$root.querySelector("#invoice_id");
+      if (!select) return;
+      this.invoiceNumber = event.target.value.trim();
+      const matching = Array.from(select.options).find((option) => option.dataset.invoiceNumber === this.invoiceNumber);
+      select.value = matching ? matching.value : "";
+      this.invoiceID = select.value;
+    },
+    copyInvoiceNumber(select, input) {
+      const option = select.options[select.selectedIndex];
+      this.invoiceNumber = option?.dataset.invoiceNumber || "";
+      input.value = this.invoiceNumber;
     },
   };
 };

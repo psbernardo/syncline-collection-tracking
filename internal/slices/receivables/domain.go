@@ -77,9 +77,7 @@ func NewDeliveryReceivableWithTax(companyID int64, invoiceNumber, poNumber, amou
 		errors["CompanyAccountID"] = "Select a company."
 	}
 	invoiceNumber = strings.TrimSpace(invoiceNumber)
-	if invoiceNumber == "" {
-		errors["InvoiceNumber"] = "This field is required."
-	} else if len(invoiceNumber) > 100 || !isAlphaNumeric(invoiceNumber) {
+	if invoiceNumber != "" && (len(invoiceNumber) > 100 || !isAlphaNumeric(invoiceNumber)) {
 		errors["InvoiceNumber"] = "Use 1-100 ASCII letters and numbers only."
 	}
 	poNumber = strings.TrimSpace(poNumber)
@@ -175,7 +173,7 @@ func (receivable DeliveryReceivable) DaysUntilDueAt(now time.Time) int {
 
 func ValidatePaymentDate(receivable DeliveryReceivable, input string, now time.Time) (time.Time, error) {
 	validation := ValidationErrors{}
-	paymentDate, err := businessdate.Parse(strings.TrimSpace(input))
+	paymentDate, err := parsePaymentDate(input)
 	if err != nil {
 		validation["PaymentDate"] = "Enter a valid payment date."
 	} else {

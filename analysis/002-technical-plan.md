@@ -161,7 +161,7 @@ Required business fields:
 
 - Internal identifier
 - Company account identifier
-- Invoice number, mandatory alphanumeric free text
+- Invoice number, optional trimmed ASCII-alphanumeric free text; may be supplied manually or sourced from a selected invoice
 - PO number, mandatory alphanumeric free text
 - Delivery date
 - Payment term, whole number from 1 to 120 calendar days

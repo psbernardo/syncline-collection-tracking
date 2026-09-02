@@ -12,7 +12,7 @@ type receivableModel struct {
 	CompanyAccountID   int64      `gorm:"column:company_account_id"`
 	CompanyName        string     `gorm:"column:company_name;->"`
 	InvoiceID          *int64     `gorm:"column:invoice_id"`
-	InvoiceNumber      string     `gorm:"column:invoice_number"`
+	InvoiceNumber      *string    `gorm:"column:invoice_number"`
 	PONumber           string     `gorm:"column:po_number"`
 	PONumberNormalized string     `gorm:"column:po_number_normalized"`
 	DeliveryDateUTC    time.Time  `gorm:"column:delivery_date_utc"`
@@ -39,7 +39,7 @@ func (model receivableModel) toDomain() DeliveryReceivable {
 		invoiceID = *model.InvoiceID
 	}
 	return DeliveryReceivable{
-		ID: model.ID, CompanyAccountID: model.CompanyAccountID, InvoiceID: invoiceID, InvoiceNumber: model.InvoiceNumber, PONumber: model.PONumber,
+		ID: model.ID, CompanyAccountID: model.CompanyAccountID, InvoiceID: invoiceID, InvoiceNumber: valueOrEmpty(model.InvoiceNumber), PONumber: model.PONumber,
 		CompanyName:        model.CompanyName,
 		PONumberNormalized: model.PONumberNormalized,
 		DeliveryDateUTC:    model.DeliveryDateUTC, PaymentTermDays: model.PaymentTermDays,
@@ -52,7 +52,7 @@ func (model receivableModel) toDomain() DeliveryReceivable {
 
 func toModel(receivable DeliveryReceivable) receivableModel {
 	return receivableModel{
-		ID: receivable.ID, CompanyAccountID: receivable.CompanyAccountID, InvoiceID: nullableInvoiceID(receivable.InvoiceID), InvoiceNumber: receivable.InvoiceNumber, PONumber: receivable.PONumber,
+		ID: receivable.ID, CompanyAccountID: receivable.CompanyAccountID, InvoiceID: nullableInvoiceID(receivable.InvoiceID), InvoiceNumber: nullableInvoiceNumber(receivable.InvoiceNumber), PONumber: receivable.PONumber,
 		PONumberNormalized: receivable.PONumberNormalized,
 		DeliveryDateUTC:    receivable.DeliveryDateUTC, PaymentTermDays: receivable.PaymentTermDays,
 		DueDateUTC: receivable.DueDateUTC, AmountDueScaled: receivable.AmountDue.Int64(), GrossAmountScaled: receivable.GrossAmount.Int64(),
@@ -74,6 +74,13 @@ func valueOrEmpty(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func nullableInvoiceNumber(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func nullableRule(value tax.RuleCode) *string {

@@ -157,7 +157,7 @@ func (repository *GormRepository) Update(ctx context.Context, db *gorm.DB, recei
 		Updates(map[string]interface{}{
 			"company_account_id":   receivable.CompanyAccountID,
 			"invoice_id":           nullableInvoiceID(receivable.InvoiceID),
-			"invoice_number":       receivable.InvoiceNumber,
+			"invoice_number":       nullableInvoiceNumber(receivable.InvoiceNumber),
 			"po_number":            receivable.PONumber,
 			"po_number_normalized": receivable.PONumberNormalized,
 			"delivery_date_utc":    receivable.DeliveryDateUTC,

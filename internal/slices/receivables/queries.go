@@ -199,14 +199,15 @@ func taxPreview(amountInput string, code tax.RuleCode) TaxPreviewViewModel {
 }
 
 type PaymentFormViewModel struct {
-	Action         string
-	ReceivableID   int64
-	PaymentDate    string
-	AmountDisplay  string
-	TaxRuleLabel   string
-	RowVersion     string
-	IdempotencyKey string
-	Errors         ValidationErrors
+	Action               string
+	ReceivableID         int64
+	PaymentDate          string
+	PaymentDateCanonical string
+	AmountDisplay        string
+	TaxRuleLabel         string
+	RowVersion           string
+	IdempotencyKey       string
+	Errors               ValidationErrors
 }
 
 type ReversePaymentFormViewModel struct {

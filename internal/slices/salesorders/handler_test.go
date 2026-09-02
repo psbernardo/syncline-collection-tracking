@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -68,8 +69,11 @@ func TestSalesOrderPDFUsesSalesOrderTitle(t *testing.T) {
 	h.RegisterRoutes(mux)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("GET", "/sales-orders/9/pdf", nil))
-	if w.Code != http.StatusOK || !bytes.HasPrefix(w.Body.Bytes(), []byte("%PDF-")) {
+	if w.Code != http.StatusOK || !bytes.HasPrefix(w.Body.Bytes(), []byte("%PDF-")) || !bytes.HasSuffix(bytes.TrimSpace(w.Body.Bytes()), []byte("%%EOF")) {
 		t.Fatalf("unexpected PDF response: status=%d bytes=%d", w.Code, w.Body.Len())
+	}
+	if got := w.Header().Get("Content-Length"); got != strconv.Itoa(w.Body.Len()) {
+		t.Fatalf("unexpected content length: header=%q body=%d", got, w.Body.Len())
 	}
 	if got := w.Header().Get("Content-Disposition"); got != `attachment; filename="SO-00000009.pdf"` {
 		t.Fatalf("unexpected filename: %q", got)
