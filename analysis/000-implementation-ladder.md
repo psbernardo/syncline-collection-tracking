@@ -56,6 +56,7 @@ This is the canonical implementation tracker for the project. The three-digit fi
 | 049 | Partial | Auto-generated sales-order numbering | [`049-sales-order-number-plan.md`](./049-sales-order-number-plan.md); sequence preview, immutable edit display, and PDF sales-order metadata are implemented in the active worktree; live SQL/browser verification remains | High |
 | 054 | Planned | Purchase-order multi-source and direct purchasing | [`054-purchase-order-multi-source-direct-purchase-plan.md`](./054-purchase-order-multi-source-direct-purchase-plan.md); implementation not started | High |
 | 055 | Partial | Supplier-scoped bulk product configuration | [`055-supplier-bulk-product-configuration-plan.md`](./055-supplier-bulk-product-configuration-plan.md); supplier catalog routes/UI, set-based bulk creation, zero-cost defaults, audit events, and automated tests pass; live SQL/browser verification remains | High |
+| 061 | Planned | Sales-order duplicate process | [`061-sales-order-duplicate-plan.md`](./061-sales-order-duplicate-plan.md); source-order duplication plan, no implementation started | High |
 
 ## Current State
 

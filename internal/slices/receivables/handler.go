@@ -1,6 +1,7 @@
 package receivables
 
 import (
+	"bytes"
 	"embed"
 	"encoding/base64"
 	"errors"
@@ -101,6 +102,8 @@ func NewHandler(service *service) (*Handler, error) {
 			return label
 		}
 		return value
+	}, "exportURL": func(query ListQuery, ext string) string {
+		return receivableExportURL(query, ext)
 	}, "loadMoreURL": receivableLoadMoreURL}
 	listTemplate, err := template.New("list").Funcs(functions).ParseFS(webtemplates.FS, "layout.html", "partials/*.html")
 	if err != nil {
@@ -139,6 +142,8 @@ func NewHandler(service *service) (*Handler, error) {
 
 func (handler *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /receivables", handler.list)
+	mux.HandleFunc("GET /receivables/export.xlsx", handler.exportXLSX)
+	mux.HandleFunc("GET /receivables/export.pdf", handler.exportPDF)
 	mux.HandleFunc("GET /receivables/new", handler.newForm)
 	mux.HandleFunc("GET /receivables/tax-preview", handler.taxPreview)
 	mux.HandleFunc("POST /receivables", handler.create)
@@ -195,6 +200,68 @@ func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handler.render(w, handler.listTemplate, "layout", page)
+}
+
+func receivableExportURL(query ListQuery, ext string) string {
+	values := url.Values{}
+	for _, companyID := range query.CompanyAccountIDs {
+		values.Add("company", strconv.FormatInt(companyID, 10))
+	}
+	if query.Invoice != "" {
+		values.Set("invoice", query.Invoice)
+	}
+	if query.PO != "" {
+		values.Set("po", query.PO)
+	}
+	for _, status := range query.Statuses {
+		values.Add("status", status)
+	}
+	return "/receivables/export." + ext + "?" + values.Encode()
+}
+
+func (handler *Handler) exportXLSX(w http.ResponseWriter, r *http.Request) {
+	handler.export(w, r, "xlsx")
+}
+
+func (handler *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
+	handler.export(w, r, "pdf")
+}
+
+func (handler *Handler) export(w http.ResponseWriter, r *http.Request, format string) {
+	query := parseListQuery(r)
+	report, err := handler.service.ExportData(r.Context(), query)
+	if err != nil {
+		handler.serverError(w, err)
+		return
+	}
+	if report.RowCount == 0 {
+		http.Error(w, "No delivery receivables match the selected filters.", http.StatusNotFound)
+		return
+	}
+	var output bytes.Buffer
+	switch format {
+	case "xlsx":
+		if err := writeReceivablesXLSX(&output, report); err != nil {
+			handler.serverError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", `attachment; filename="receivables.xlsx"`)
+	case "pdf":
+		if err := NewReceivablesPDFRenderer().Render(&output, report); err != nil {
+			handler.serverError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", `attachment; filename="receivables.pdf"`)
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Length", strconv.Itoa(output.Len()))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(output.Bytes())
 }
 
 func receivableLoadMoreURL(query ListQuery, cursor string) string {

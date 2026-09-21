@@ -98,6 +98,25 @@ func (repository *GormRepository) ListFiltered(ctx context.Context, query ListQu
 	return result, total, nil
 }
 
+func (repository *GormRepository) ListFilteredAll(ctx context.Context, query ListQuery) ([]DeliveryReceivable, error) {
+	query = normalizeListQuery(query)
+	if query.Now.IsZero() {
+		query.Now = time.Now().UTC()
+	}
+	today, nearEnd := businessdate.ClassificationBoundaries(query.Now)
+	base := repository.db.WithContext(ctx).Table("dbo.delivery_receivables AS r").Joins("INNER JOIN dbo.company_accounts AS a ON a.company_account_id = r.company_account_id")
+	base = applyFilters(base, query, today, nearEnd)
+	var models []receivableModel
+	if err := base.Select(receivableSelect).Order("a.company_name, r.due_date_utc, r.delivery_receivable_id").Find(&models).Error; err != nil {
+		return nil, fmt.Errorf("list all filtered receivables: %w", err)
+	}
+	result := make([]DeliveryReceivable, 0, len(models))
+	for _, model := range models {
+		result = append(result, model.toDomain())
+	}
+	return result, nil
+}
+
 func applyFilters(query *gorm.DB, input ListQuery, today, nearEnd time.Time) *gorm.DB {
 	if len(input.CompanyAccountIDs) > 0 {
 		query = query.Where("r.company_account_id IN ?", input.CompanyAccountIDs)

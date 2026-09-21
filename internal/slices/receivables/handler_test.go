@@ -1,9 +1,11 @@
 package receivables
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -217,6 +219,108 @@ func TestReceivableLoadMoreURLUsesFiveItemPages(t *testing.T) {
 	}
 }
 
+func TestReceivableExportURLBuildsFilterQuery(t *testing.T) {
+	query := ListQuery{CompanyAccountIDs: []int64{7, 9}, Invoice: "0220", PO: "PO-1", Statuses: []string{"overdue", "near_due"}}
+	exportURL := receivableExportURL(query, "xlsx")
+	for _, expected := range []string{"/receivables/export.xlsx", "company=7", "company=9", "invoice=0220", "po=PO-1", "status=overdue", "status=near_due"} {
+		if !strings.Contains(exportURL, expected) {
+			t.Fatalf("export URL = %q, want it to contain %q", exportURL, expected)
+		}
+	}
+}
+
+func TestReceivableExportXLSXEndpointDownloadsFilteredWorkbook(t *testing.T) {
+	handler, err := NewHandler(NewService(nil, &loadMoreReceivableRepository{}, &fakeAccountRepository{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/receivables/export.xlsx?company=1&invoice=0220&po=PO-1&status=overdue", nil)
+	handler.exportXLSX(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" {
+		t.Fatalf("content type = %q, want xlsx mime", got)
+	}
+	if got := recorder.Header().Get("Content-Disposition"); got != `attachment; filename="receivables.xlsx"` {
+		t.Fatalf("content disposition = %q", got)
+	}
+	if got := recorder.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("x-content-type-options = %q, want nosniff", got)
+	}
+	if got := recorder.Header().Get("Content-Length"); got != strconv.Itoa(recorder.Body.Len()) {
+		t.Fatalf("content length = %q, want %d", got, recorder.Body.Len())
+	}
+	if !bytes.HasPrefix(recorder.Body.Bytes(), []byte("PK")) {
+		t.Fatal("xlsx response does not start with the zip magic prefix")
+	}
+}
+
+func TestReceivableExportPDFEndpointDownloadsFilteredReport(t *testing.T) {
+	handler, err := NewHandler(NewService(nil, &loadMoreReceivableRepository{}, &fakeAccountRepository{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/receivables/export.pdf?company=1&status=overdue", nil)
+	handler.exportPDF(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "application/pdf" {
+		t.Fatalf("content type = %q, want application/pdf", got)
+	}
+	if got := recorder.Header().Get("Content-Disposition"); got != `attachment; filename="receivables.pdf"` {
+		t.Fatalf("content disposition = %q", got)
+	}
+	if got := recorder.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("x-content-type-options = %q, want nosniff", got)
+	}
+	if got := recorder.Header().Get("Content-Length"); got != strconv.Itoa(recorder.Body.Len()) {
+		t.Fatalf("content length = %q, want %d", got, recorder.Body.Len())
+	}
+	if !bytes.HasPrefix(recorder.Body.Bytes(), []byte("%PDF-")) || !bytes.HasSuffix(bytes.TrimSpace(recorder.Body.Bytes()), []byte("%%EOF")) {
+		t.Fatal("pdf response is not a well-formed PDF")
+	}
+}
+
+func TestReceivableExportEmptyFiltersReturnsNotFound(t *testing.T) {
+	handler, err := NewHandler(NewService(nil, &fakeReceivableRepository{}, &fakeAccountRepository{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, endpoint := range []func(w http.ResponseWriter, r *http.Request){
+		handler.exportXLSX,
+		handler.exportPDF,
+	} {
+		recorder := httptest.NewRecorder()
+		endpoint(recorder, httptest.NewRequest(http.MethodGet, "/receivables/export?status=invalid", nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("empty export status = %d, want %d", recorder.Code, http.StatusNotFound)
+		}
+	}
+}
+
+func TestReceivableListPageRendersExportButtonsForFilteredResults(t *testing.T) {
+	handler, err := NewHandler(NewService(nil, &loadMoreReceivableRepository{}, &fakeAccountRepository{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/receivables?company=1&status=overdue", nil)
+	handler.list(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	body := recorder.Body.String()
+	for _, expected := range []string{`href="/receivables/export.xlsx?company=1&amp;status=overdue"`, `href="/receivables/export.pdf?company=1&amp;status=overdue"`, "Export to Excel", "Export to PDF"} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("list response does not contain %q", expected)
+		}
+	}
+}
+
 func TestParseListQueryMarksInvalidStatusFilterAsProvided(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/receivables?status=invalid", nil)
 	query := parseListQuery(request)
@@ -369,6 +473,10 @@ func (*fakeReceivableRepository) ListFiltered(context.Context, ListQuery) ([]Del
 	return []DeliveryReceivable{}, 0, nil
 }
 
+func (*fakeReceivableRepository) ListFilteredAll(context.Context, ListQuery) ([]DeliveryReceivable, error) {
+	return []DeliveryReceivable{}, nil
+}
+
 func (*loadMoreReceivableRepository) Create(context.Context, *gorm.DB, DeliveryReceivable) (DeliveryReceivable, error) {
 	return DeliveryReceivable{}, nil
 }
@@ -383,6 +491,10 @@ func (*loadMoreReceivableRepository) List(context.Context) ([]DeliveryReceivable
 
 func (*loadMoreReceivableRepository) ListFiltered(context.Context, ListQuery) ([]DeliveryReceivable, int64, error) {
 	return []DeliveryReceivable{{ID: 2, CompanyName: "Acme Corp", InvoiceNumber: "0220", PONumber: "PO-next", DeliveryDateUTC: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), DueDateUTC: time.Date(2026, 8, 14, 0, 0, 0, 0, time.UTC), PaymentTermDays: 5, AmountDue: 100, GrossAmount: 200, LifecycleStatus: "Active", RowVersion: []byte("version")}}, 2, nil
+}
+
+func (*loadMoreReceivableRepository) ListFilteredAll(context.Context, ListQuery) ([]DeliveryReceivable, error) {
+	return []DeliveryReceivable{{ID: 2, CompanyName: "Acme Corp", InvoiceNumber: "0220", PONumber: "PO-next", DeliveryDateUTC: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), DueDateUTC: time.Date(2026, 8, 14, 0, 0, 0, 0, time.UTC), PaymentTermDays: 5, AmountDue: 100, GrossAmount: 200, LifecycleStatus: "Active", RowVersion: []byte("version")}}, nil
 }
 
 func (*loadMoreReceivableRepository) Update(context.Context, *gorm.DB, DeliveryReceivable, []byte) (DeliveryReceivable, error) {
@@ -440,6 +552,10 @@ func (*paymentReceivableRepository) List(context.Context) ([]DeliveryReceivable,
 
 func (*paymentReceivableRepository) ListFiltered(context.Context, ListQuery) ([]DeliveryReceivable, int64, error) {
 	return nil, 0, nil
+}
+
+func (*paymentReceivableRepository) ListFilteredAll(context.Context, ListQuery) ([]DeliveryReceivable, error) {
+	return nil, nil
 }
 
 func (*paymentReceivableRepository) Update(context.Context, *gorm.DB, DeliveryReceivable, []byte) (DeliveryReceivable, error) {

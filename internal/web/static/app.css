@@ -27,6 +27,7 @@ a { color: inherit; }
 .muted { color: #6b7280; }
 .card { border: 1px solid #e5e7eb; border-radius: .75rem; background: #fff; box-shadow: 0 4px 12px rgba(17,24,39,.04); }
 .card-heading { display: flex; align-items: center; justify-content: space-between; padding: 1.1rem 1.25rem; border-bottom: 1px solid #f0f1f4; }
+.card-heading-actions { display: flex; align-items: center; gap: .55rem; margin-left: 1rem; }
 .card-heading h2 { margin: 0; color: #111827; font-size: 1rem; }
 .badge { display: inline-flex; align-items: center; border-radius: 999px; background: #f3f4f6; padding: .3rem .65rem; color: #4b5563; font-size: .75rem; font-weight: 700; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; border: 1px solid #d1d5db; border-radius: .55rem; padding: .65rem .9rem; background: #fff; color: #374151; text-decoration: none; cursor: pointer; font: inherit; font-size: .86rem; font-weight: 700; }

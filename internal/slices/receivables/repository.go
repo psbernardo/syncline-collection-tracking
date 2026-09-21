@@ -12,6 +12,7 @@ type Repository interface {
 	FindByID(ctx context.Context, db *gorm.DB, id int64) (DeliveryReceivable, error)
 	List(ctx context.Context) ([]DeliveryReceivable, error)
 	ListFiltered(ctx context.Context, query ListQuery) ([]DeliveryReceivable, int64, error)
+	ListFilteredAll(ctx context.Context, query ListQuery) ([]DeliveryReceivable, error)
 	Update(ctx context.Context, db *gorm.DB, receivable DeliveryReceivable, originalVersion []byte) (DeliveryReceivable, error)
 	MarkPaymentReceived(ctx context.Context, db *gorm.DB, id int64, paymentDate time.Time, originalVersion []byte) (DeliveryReceivable, error)
 	ReversePaymentAcknowledgement(ctx context.Context, db *gorm.DB, id int64, originalVersion []byte) (DeliveryReceivable, error)
