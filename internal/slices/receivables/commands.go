@@ -477,6 +477,18 @@ func (service *service) ListFiltered(ctx context.Context, query ListQuery) (List
 	return result, nil
 }
 
+func (service *service) ExportData(ctx context.Context, query ListQuery) (ExportReport, error) {
+	query = normalizeListQuery(query)
+	if query.Now.IsZero() {
+		query.Now = service.now()
+	}
+	receivables, err := service.repo.ListFilteredAll(ctx, query)
+	if err != nil {
+		return ExportReport{}, err
+	}
+	return buildExportReport(receivables, query, query.Now), nil
+}
+
 func (service *service) Get(ctx context.Context, id int64) (ReceivableViewModel, error) {
 	receivable, err := service.GetEntity(ctx, id)
 	if err != nil {

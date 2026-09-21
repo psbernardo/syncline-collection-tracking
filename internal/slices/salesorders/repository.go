@@ -21,6 +21,10 @@ const (
 
 const FixedSalesPerson = "Alma Mae Bernardo"
 
+func duplicateableStatus(status Status) bool {
+	return status == Open || status == Converted
+}
+
 var (
 	ErrOrderNotReady   = errors.New("sales order is not ready for creation")
 	ErrAllocationStale = errors.New("quotation quantities changed; reload and try again")
@@ -67,6 +71,19 @@ type StandaloneOrderInput struct {
 	Lines            []StandaloneLineInput
 }
 
+type DuplicateLineSelection struct {
+	SalesOrderLineID int64
+	Quantity         money.Amount
+}
+
+type DuplicateOrderInput struct {
+	SourceOrderID    int64
+	CompanyAccountID int64
+	TermsDays        int
+	CustomerPONumber string
+	Lines            []DuplicateLineSelection
+}
+
 type SalesOrder struct {
 	ID               int64
 	InvoiceID        int64
@@ -96,6 +113,10 @@ type NumberedSelectionCreator interface {
 
 type StandaloneCreator interface {
 	CreateStandalone(context.Context, StandaloneOrderInput) (SalesOrder, error)
+}
+
+type DuplicateCreator interface {
+	Duplicate(context.Context, DuplicateOrderInput) (SalesOrder, error)
 }
 
 type StandaloneUpdater interface {
@@ -292,6 +313,70 @@ func (r *GormRepository) CreateStandalone(ctx context.Context, input StandaloneO
 			calculated[index].ProductSKU, calculated[index].ProductName, calculated[index].UOM = product.SKU, product.Name, product.UOM
 		}
 		return r.createOrderTx(tx, input.CompanyAccountID, input.TermsDays, input.CustomerPONumber, nil, calculated, nil, &result, totals, input.Number)
+	})
+	if err != nil {
+		return SalesOrder{}, err
+	}
+	return r.FindByID(ctx, result.ID)
+}
+
+func (r *GormRepository) Duplicate(ctx context.Context, input DuplicateOrderInput) (SalesOrder, error) {
+	po, err := ValidateCustomerPO(input.CustomerPONumber)
+	if err != nil {
+		return SalesOrder{}, err
+	}
+	if input.SourceOrderID <= 0 || input.CompanyAccountID <= 0 || !quotations.ValidTermsDays(input.TermsDays) || len(input.Lines) == 0 {
+		return SalesOrder{}, ErrOrderNotReady
+	}
+	var result SalesOrder
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var source orderModel
+		if err := tx.Raw("SELECT * FROM dbo.sales_orders WITH (UPDLOCK, HOLDLOCK) WHERE sales_order_id = ?", input.SourceOrderID).Scan(&source).Error; err != nil || source.ID == 0 || !duplicateableStatus(source.Status) {
+			return ErrOrderNotReady
+		}
+		var sourceLines []lineModel
+		if err := tx.Raw("SELECT * FROM dbo.sales_order_lines WITH (UPDLOCK, HOLDLOCK) WHERE sales_order_id = ? ORDER BY sales_order_line_id", input.SourceOrderID).Scan(&sourceLines).Error; err != nil || len(sourceLines) == 0 {
+			return ErrOrderNotReady
+		}
+		var accountCount int64
+		if err := tx.Table("dbo.company_accounts").Where("company_account_id = ?", input.CompanyAccountID).Count(&accountCount).Error; err != nil || accountCount != 1 {
+			return ErrOrderNotReady
+		}
+		byID := make(map[int64]lineModel, len(sourceLines))
+		for _, line := range sourceLines {
+			byID[line.ID] = line
+		}
+		requested := make(map[int64]money.Amount, len(input.Lines))
+		orderedIDs := make([]int64, 0, len(input.Lines))
+		for _, selection := range input.Lines {
+			if _, exists := requested[selection.SalesOrderLineID]; exists {
+				return ErrOrderNotReady
+			}
+			requested[selection.SalesOrderLineID] += selection.Quantity
+			orderedIDs = append(orderedIDs, selection.SalesOrderLineID)
+		}
+		calculated := make([]quotations.Line, 0, len(orderedIDs))
+		for _, lineID := range orderedIDs {
+			quantity := requested[lineID]
+			line, ok := byID[lineID]
+			if !ok || quantity <= 0 {
+				return ErrOrderNotReady
+			}
+			copied := quotations.Line{ProductID: line.ProductID, ProductSKU: line.SKU, ProductName: line.Name, Quantity: quantity, UOM: line.UOM, UnitPrice: money.Amount(line.UnitPrice), TaxRate: line.TaxRate, TaxCode: line.TaxCode}
+			copied.LineTotal, copied.TaxAmount, copied.VATInclusiveTotal, err = quotations.CalculateLine(copied)
+			if err != nil {
+				return err
+			}
+			calculated = append(calculated, copied)
+		}
+		if len(calculated) == 0 {
+			return ErrOrderNotReady
+		}
+		calculated, totals, err := quotations.CalculateProfitability(calculated, quotations.NoCommission, 0, 0, 0, 0)
+		if err != nil {
+			return err
+		}
+		return r.createOrderTx(tx, input.CompanyAccountID, input.TermsDays, po, nil, calculated, nil, &result, totals)
 	})
 	if err != nil {
 		return SalesOrder{}, err

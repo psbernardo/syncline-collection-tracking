@@ -27,7 +27,10 @@ func (r quotationRepo) Update(context.Context, quotations.Quotation, []byte) (qu
 	return r.value, nil
 }
 
-type orderRepo struct{ value SalesOrder }
+type orderRepo struct {
+	value          SalesOrder
+	duplicateInput DuplicateOrderInput
+}
 
 func (r *orderRepo) CreateFromQuotation(_ context.Context, q quotations.Quotation, po string) (SalesOrder, error) {
 	r.value = SalesOrder{ID: 9, Number: "SO-00000009", CustomerPONumber: po, SalesPerson: FixedSalesPerson, Status: Open, Quotation: q}
@@ -35,6 +38,23 @@ func (r *orderRepo) CreateFromQuotation(_ context.Context, q quotations.Quotatio
 	return r.value, nil
 }
 func (r *orderRepo) FindByID(context.Context, int64) (SalesOrder, error) { return r.value, nil }
+
+func (r *orderRepo) Duplicate(_ context.Context, input DuplicateOrderInput) (SalesOrder, error) {
+	r.duplicateInput = input
+	r.value = SalesOrder{ID: 10, Number: "SO-00000010", QuotationID: 0, CustomerPONumber: input.CustomerPONumber, Status: Open, Quotation: r.value.Quotation}
+	r.value.Quotation.Lines = append([]quotations.Line(nil), r.value.Quotation.Lines...)
+	for index := range r.value.Quotation.Lines {
+		for _, selection := range input.Lines {
+			if selection.SalesOrderLineID == r.value.Quotation.Lines[index].ID {
+				r.value.Quotation.Lines[index].Quantity = selection.Quantity
+			}
+		}
+	}
+	if input.SourceOrderID <= 0 {
+		return SalesOrder{}, ErrOrderNotReady
+	}
+	return r.value, nil
+}
 
 func testQuotation() quotations.Quotation {
 	return quotations.Quotation{
@@ -183,5 +203,54 @@ func TestCustomerPOIsRequiredAndTrimmed(t *testing.T) {
 	value, err := ValidateCustomerPO("  PO-123  ")
 	if err != nil || value != "PO-123" {
 		t.Fatalf("unexpected customer PO: %q, error=%v", value, err)
+	}
+}
+
+func TestDuplicateSalesOrderPageCopiesSourceContext(t *testing.T) {
+	q := testQuotation()
+	q.Lines[0].ID = 31
+	orders := &orderRepo{value: SalesOrder{ID: 9, Number: "SO-00000009", CustomerPONumber: "PO-OLD", Status: Open, Quotation: q}}
+	h := NewHandler(orders, quotationRepo{value: q})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/sales-orders/9/duplicate", nil))
+	body := w.Body.String()
+	if w.Code != http.StatusOK || !strings.Contains(body, "Duplicate sales order") || !strings.Contains(body, "PO-OLD") || !strings.Contains(body, "No quotation linked") {
+		t.Fatalf("unexpected duplicate page: status=%d body=%s", w.Code, body)
+	}
+	if !strings.Contains(body, `action="/sales-orders/9/duplicate"`) || !strings.Contains(body, `name="lines[0].quantity"`) {
+		t.Fatalf("duplicate form missing expected fields: %s", body)
+	}
+}
+
+func TestCreateDuplicateSalesOrderUsesEditedPOAndQuantities(t *testing.T) {
+	q := testQuotation()
+	q.Lines[0].ID = 31
+	orders := &orderRepo{value: SalesOrder{ID: 9, Number: "SO-00000009", CustomerPONumber: "PO-OLD", Status: Open, Quotation: q}}
+	h := NewHandler(orders, quotationRepo{value: q})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+	form := url.Values{"company_account_id": {"42"}, "customer_po_number": {" PO-NEW "}, "terms_days": {"15"}, "lines[0].id": {"31"}, "lines[0].quantity": {"2"}}
+	request := httptest.NewRequest("POST", "/sales-orders/9/duplicate", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, request)
+	if w.Code != http.StatusSeeOther || orders.value.CustomerPONumber != "PO-NEW" || orders.value.Quotation.Lines[0].Quantity != 20000 || orders.duplicateInput.CompanyAccountID != 42 || orders.duplicateInput.TermsDays != 15 {
+		t.Fatalf("unexpected duplicate result: status=%d order=%+v", w.Code, orders.value)
+	}
+}
+
+func TestConvertedSalesOrderCanBeDuplicated(t *testing.T) {
+	q := testQuotation()
+	q.Lines[0].ID = 31
+	orders := &orderRepo{value: SalesOrder{ID: 9, Number: "SO-00000009", CustomerPONumber: "PO-OLD", Status: Converted, Quotation: q}}
+	h := NewHandler(orders, quotationRepo{value: q})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/sales-orders/9/duplicate", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Duplicate sales order") {
+		t.Fatalf("expected converted order duplication page, got %d: %s", w.Code, w.Body.String())
 	}
 }

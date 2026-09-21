@@ -45,6 +45,8 @@ type orderFormPage struct {
 	Edit                    bool
 	EditAcknowledged        bool
 	Standalone              bool
+	Duplicate               bool
+	SourceNumber            string
 	PO                      string
 	Number                  string
 }
@@ -122,6 +124,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /sales-orders/{id}", h.view)
 	mux.HandleFunc("GET /sales-orders/{id}/edit", h.editStandalone)
 	mux.HandleFunc("POST /sales-orders/{id}", h.updateStandalone)
+	mux.HandleFunc("GET /sales-orders/{id}/duplicate", h.newDuplicate)
+	mux.HandleFunc("POST /sales-orders/{id}/duplicate", h.createDuplicate)
 	mux.HandleFunc("GET /quotations/{id}/sales-order/new", h.newFromQuotation)
 	mux.HandleFunc("POST /quotations/{id}/sales-order", h.createFromQuotation)
 	mux.HandleFunc("GET /sales-orders/{id}/pdf", h.pdf)
@@ -213,6 +217,161 @@ func (h *Handler) newFromQuotation(w http.ResponseWriter, r *http.Request) {
 		page.Number, _ = h.number.NextNumber(r.Context())
 	}
 	h.render(w, "form", page)
+}
+
+func (h *Handler) newDuplicate(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	order, err := h.orders.FindByID(r.Context(), id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if !duplicateableStatus(order.Status) || len(order.Quotation.Lines) == 0 {
+		http.Error(w, "Only open or converted sales orders with items can be duplicated", http.StatusConflict)
+		return
+	}
+	page := duplicatePage(order, order.CustomerPONumber, "")
+	if h.number != nil {
+		page.Number, _ = h.number.NextNumber(r.Context())
+	}
+	if err := h.loadDuplicateOptions(r.Context(), &page); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	h.render(w, "form", page)
+}
+
+func (h *Handler) createDuplicate(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	order, err := h.orders.FindByID(r.Context(), id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if !duplicateableStatus(order.Status) || len(order.Quotation.Lines) == 0 {
+		http.Error(w, "Only open or converted sales orders with items can be duplicated", http.StatusConflict)
+		return
+	}
+	submittedQuantities := duplicateQuantitiesFromForm(r)
+	input, inputErr := duplicateInputFromForm(r, id)
+	selections, parseErr := selectionsFromForm(r)
+	if inputErr != nil || parseErr != nil {
+		message := ""
+		if inputErr != nil {
+			message = inputErr.Error()
+		} else {
+			message = parseErr.Error()
+		}
+		page := duplicatePage(order, r.FormValue("customer_po_number"), message, submittedQuantities)
+		applyDuplicateFormValues(&page, r)
+		if err := h.loadDuplicateOptions(r.Context(), &page); err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		h.render(w, "form", page)
+		return
+	}
+	creator, ok := h.orders.(DuplicateCreator)
+	if !ok {
+		http.Error(w, "Sales-order duplication is not available", http.StatusNotImplemented)
+		return
+	}
+	duplicateSelections := make([]DuplicateLineSelection, 0, len(selections))
+	for _, selection := range selections {
+		duplicateSelections = append(duplicateSelections, DuplicateLineSelection{SalesOrderLineID: selection.QuotationLineID, Quantity: selection.Quantity})
+	}
+	input.Lines = duplicateSelections
+	created, err := creator.Duplicate(r.Context(), input)
+	if err != nil {
+		page := duplicatePage(order, input.CustomerPONumber, conversionError(err), submittedQuantities)
+		applyDuplicateFormValues(&page, r)
+		if loadErr := h.loadDuplicateOptions(r.Context(), &page); loadErr != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		h.render(w, "form", page)
+		return
+	}
+	h.redirectOrder(w, r, created)
+}
+
+func duplicatePage(order SalesOrder, po, pageError string, submitted ...map[int64]money.Amount) orderFormPage {
+	allocation := make([]AllocationLine, 0, len(order.Quotation.Lines))
+	for _, line := range order.Quotation.Lines {
+		current := line.Quantity
+		if len(submitted) > 0 && submitted[0] != nil {
+			current = submitted[0][line.ID]
+		}
+		allocation = append(allocation, AllocationLine{Line: line, Current: current, Remaining: line.Quantity})
+	}
+	return orderFormPage{Title: "Duplicate sales order", ActiveNav: "sales-orders", Quotation: order.Quotation, Allocation: allocation, Duplicate: true, OrderID: order.ID, SourceNumber: order.Number, PO: po, Error: pageError, CustomerID: order.Quotation.CompanyAccountID, TermsDays: order.Quotation.TermsDays}
+}
+
+func (h *Handler) loadDuplicateOptions(ctx context.Context, page *orderFormPage) error {
+	if err := h.loadOptions(ctx, page); err != nil {
+		return err
+	}
+	page.CustomerSelect.Selected = strconv.FormatInt(page.CustomerID, 10)
+	return nil
+}
+
+func applyDuplicateFormValues(page *orderFormPage, r *http.Request) {
+	if accountID, err := strconv.ParseInt(r.FormValue("company_account_id"), 10, 64); err == nil && accountID > 0 {
+		page.CustomerID = accountID
+	}
+	if terms, err := strconv.Atoi(r.FormValue("terms_days")); err == nil {
+		page.TermsDays = terms
+	}
+}
+
+func duplicateInputFromForm(r *http.Request, sourceID int64) (DuplicateOrderInput, error) {
+	if err := r.ParseForm(); err != nil {
+		return DuplicateOrderInput{}, err
+	}
+	accountID, err := strconv.ParseInt(r.FormValue("company_account_id"), 10, 64)
+	if err != nil || accountID < 1 {
+		return DuplicateOrderInput{}, errors.New("select a customer")
+	}
+	terms, err := strconv.Atoi(r.FormValue("terms_days"))
+	if err != nil || !quotations.ValidTermsDays(terms) {
+		return DuplicateOrderInput{}, errors.New("select valid payment terms")
+	}
+	po, err := ValidateCustomerPO(r.FormValue("customer_po_number"))
+	if err != nil {
+		return DuplicateOrderInput{}, err
+	}
+	return DuplicateOrderInput{SourceOrderID: sourceID, CompanyAccountID: accountID, TermsDays: terms, CustomerPONumber: po}, nil
+}
+
+func duplicateQuantitiesFromForm(r *http.Request) map[int64]money.Amount {
+	if err := r.ParseForm(); err != nil {
+		return nil
+	}
+	quantities := make(map[int64]money.Amount)
+	for key, values := range r.PostForm {
+		if !strings.HasPrefix(key, "lines[") || !strings.HasSuffix(key, "].quantity") || len(values) == 0 {
+			continue
+		}
+		start := strings.Index(key, "[") + 1
+		end := strings.Index(key, "]")
+		lineID, err := strconv.ParseInt(r.FormValue("lines["+key[start:end]+"].id"), 10, 64)
+		if err != nil || lineID < 1 {
+			continue
+		}
+		quantity, err := money.Parse(values[0])
+		if err == nil {
+			quantities[lineID] = quantity
+		}
+	}
+	return quantities
 }
 
 func (h *Handler) createFromQuotation(w http.ResponseWriter, r *http.Request) {
