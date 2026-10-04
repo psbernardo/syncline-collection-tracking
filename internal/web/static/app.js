@@ -107,9 +107,9 @@ window.catalogSelection = function () {
     initialize() {
       this.refreshCount();
     },
-    matches(sku, name) {
+    matches(sku, name, description = "") {
       const query = this.query.trim().toLowerCase();
-      return !query || `${sku} ${name}`.toLowerCase().includes(query);
+      return !query || `${sku} ${name} ${description}`.toLowerCase().includes(query);
     },
     visibleCheckboxes() {
       return Array.from(this.$root.querySelectorAll("[data-product-checkbox]")).filter((checkbox) => checkbox.closest("tr")?.offsetParent !== null);
@@ -222,6 +222,8 @@ window.quotationForm = function () {
       const container = document.querySelector("#quotation-lines");
       const index = container.querySelectorAll("[data-line]").length;
       container.insertAdjacentHTML("beforeend", document.querySelector("#quotation-row-template").innerHTML.replaceAll("__INDEX__", index));
+      const row = container.lastElementChild;
+      window.Alpine?.initTree(row);
       this.lineCount = index + 1;
     },
     productSelected(event) {
@@ -303,8 +305,10 @@ window.salesOrderForm = function () {
       if (!template || !container) return;
       const index = container.querySelectorAll("[data-order-line]").length;
       container.insertAdjacentHTML("beforeend", template.innerHTML.replaceAll("__INDEX__", index));
+      const row = container.lastElementChild;
+      window.Alpine?.initTree(row);
       this.refresh();
-      container.lastElementChild?.querySelector("select")?.focus();
+      row?.querySelector(".searchable-select-input")?.focus();
     },
     moveAll() {
       if (this.$root.querySelector("#order-line-template")) {
@@ -315,6 +319,15 @@ window.salesOrderForm = function () {
         const input = row.querySelector("[data-quantity]");
         if (input) input.value = row.dataset.remaining || "0";
       });
+      this.refresh();
+    },
+    productSelected(event) {
+      const row = event.target.closest("[data-order-line]");
+      if (!row) return;
+      const uom = row.querySelector("td[data-uom]");
+      const hiddenUOM = row.querySelector("[data-uom-input]");
+      if (uom) uom.textContent = event.detail.uom || "--";
+      if (hiddenUOM) hiddenUOM.value = event.detail.uom || "";
       this.refresh();
     },
     clearAll() {
@@ -346,12 +359,11 @@ window.salesOrderForm = function () {
         if (quantity > 0) count++;
         const amount = row.querySelector("[data-amount]");
         if (amount) amount.textContent = this.money(quantity * price);
-        const product = row.querySelector("select[name$='.product_id']");
-        const option = product?.selectedOptions[0];
-        const uom = row.querySelector("[data-uom]");
+        const product = row.querySelector("input[type='hidden'][name$='.product_id']") || row.querySelector("select[name$='.product_id']");
+        const productID = product?.value || "";
+        const uom = row.querySelector("td[data-uom]");
         const hiddenUOM = row.querySelector("[data-uom-input]");
-        if (option && uom) uom.textContent = option.dataset.uom || "--";
-        if (option && hiddenUOM) hiddenUOM.value = option.dataset.uom || "";
+        if (uom) uom.textContent = productID && hiddenUOM?.value ? hiddenUOM.value : "--";
       });
       const output = this.$root.querySelector("[data-total]");
       const countOutput = this.$root.querySelector("[data-count]");
@@ -562,11 +574,15 @@ window.searchableSelect = function () {
     open: false,
     query: "",
     selected: "",
+    selectedLabel: "",
+    selectedDescription: "",
+    showSelectedDetails: false,
     options: [],
     initialize() {
       this.options = Array.from(this.$root.querySelectorAll("[data-value]")).map((option) => ({
         value: option.dataset.value,
         label: option.dataset.label,
+        description: option.dataset.description || "",
         search: option.dataset.search || option.dataset.label,
         uom: option.dataset.uom || "",
         supplierSKU: option.dataset.supplierSku || "",
@@ -576,11 +592,17 @@ window.searchableSelect = function () {
         disabled: option.dataset.disabled === "true",
       }));
       this.selected = this.$root.dataset.selected || "";
+      this.showSelectedDetails = this.$root.dataset.showSelectedDetails === "true";
+      this.ensureSelectedSummary();
       const selected = this.options.find((option) => option.value === this.selected);
       if (selected) {
-        this.$root.querySelector(".searchable-select-input").value = selected.label;
+        this.selectedLabel = selected.label;
+        this.selectedDescription = selected.description;
+        this.$root.querySelector(".searchable-select-input").value = this.showSelectedDetails ? "" : selected.label;
+        if (!this.showSelectedDetails) this.query = selected.label;
         this.setUOM(selected.uom);
       }
+      this.refreshSelectedSummary();
       this.repositionOnScroll = () => { if (this.open) this.positionOptions(); };
       window.addEventListener("scroll", this.repositionOnScroll, true);
       window.addEventListener("resize", this.repositionOnScroll);
@@ -613,9 +635,12 @@ window.searchableSelect = function () {
       const option = this.options.find((item) => item.value === value);
       if (!option || option.disabled) return;
       this.selected = value;
-      this.query = option.label;
+      this.selectedLabel = option.label;
+      this.selectedDescription = option.description;
+      this.query = this.showSelectedDetails ? "" : option.label;
       this.$root.querySelector("input[type='hidden']").value = value;
-      this.$root.querySelector(".searchable-select-input").value = option.label;
+      this.$root.querySelector(".searchable-select-input").value = this.showSelectedDetails ? "" : option.label;
+      this.refreshSelectedSummary();
       this.setUOM(option.uom);
       this.$root.dispatchEvent(new CustomEvent("product-selected", { detail: option, bubbles: true }));
       this.close();
@@ -623,10 +648,13 @@ window.searchableSelect = function () {
     },
     clear() {
       this.selected = "";
+      this.selectedLabel = "";
+      this.selectedDescription = "";
       this.query = "";
       this.$root.closest("[data-purchase-line]")?.removeAttribute("data-product-id");
       this.$root.querySelector("input[type='hidden']").value = "";
       this.$root.querySelector(".searchable-select-input").value = "";
+      this.refreshSelectedSummary();
       const row = this.$root.closest("[data-purchase-line]");
       if (row) {
         const quantity = row.querySelector("input[name$='.quantity']");
@@ -640,8 +668,38 @@ window.searchableSelect = function () {
       this.setUOM("");
       this.open = true;
     },
+    ensureSelectedSummary() {
+      if (!this.showSelectedDetails || this.$root.querySelector(".searchable-select-selected")) return;
+      const control = this.$root.querySelector(".searchable-select-control");
+      if (!control) return;
+      const summary = document.createElement("div");
+      summary.className = "searchable-select-selected";
+      summary.setAttribute("aria-live", "polite");
+      const label = document.createElement("strong");
+      label.className = "searchable-select-selected-label";
+      const description = document.createElement("span");
+      description.className = "searchable-select-selected-description";
+      summary.append(label, description);
+      control.insertAdjacentElement("afterend", summary);
+    },
+    refreshSelectedSummary() {
+      const summary = this.$root.querySelector(".searchable-select-selected");
+      if (!summary) return;
+      summary.hidden = !this.selected;
+      const label = summary.querySelector(".searchable-select-selected-label");
+      const description = summary.querySelector(".searchable-select-selected-description");
+      if (label) label.textContent = this.selectedLabel;
+      if (description) {
+        description.textContent = this.selectedDescription;
+        description.hidden = !this.selectedDescription;
+      }
+    },
     setUOM(value) {
-      const input = this.$root.closest(".quotation-modal")?.querySelector("[data-uom-input]") || this.$root.closest("[data-line], form")?.querySelector("[data-uom-input]");
+      const line = this.$root.closest("[data-line], [data-order-line]");
+      const display = line?.querySelector("[data-field='uom']") || line?.querySelector("td[data-uom]");
+      if (display) display.textContent = value || "";
+      const lineInput = line?.querySelector("[data-field='uom-input'], [data-uom-input]");
+      const input = lineInput || this.$root.closest(".quotation-modal")?.querySelector("[data-uom-input]") || this.$root.closest("form")?.querySelector("[data-uom-input]");
       if (input) { input.value = value; input.dispatchEvent(new Event("input", { bubbles: true })); }
     },
     close() { this.open = false; },

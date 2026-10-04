@@ -29,6 +29,7 @@ type Supplier struct {
 type SupplierProduct struct {
 	ID, SupplierID, ProductID                          int64
 	SupplierName, ProductSKU, ProductName, SupplierSKU string
+	ProductDescription                                 string
 	ReferenceCost                                      money.Amount
 	IsActive                                           bool
 	UpdatedAtUTC                                       time.Time
@@ -37,6 +38,7 @@ type SupplierProduct struct {
 type SupplierCatalogProduct struct {
 	ProductID, SupplierProductID int64
 	SKU, Name, UOM               string
+	Description                  string
 	ReferenceCost                money.Amount
 	Configured, IsActive         bool
 }

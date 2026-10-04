@@ -13,6 +13,7 @@
      <a href="/quotations" @click="navOpen = false"{{ if eq .ActiveNav "quotations" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">$</span>Quotations</a>
       <a href="/sales-orders" @click="navOpen = false"{{ if eq .ActiveNav "sales-orders" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">O</span>Sales orders</a>
       <a href="/purchase-orders" @click="navOpen = false"{{ if eq .ActiveNav "purchase-orders" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">P</span>Purchase orders</a>
+       <a href="/supplier-payments" @click="navOpen = false"{{ if eq .ActiveNav "supplier-payments" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">$</span>Supplier payments</a>
      <a href="/invoices" @click="navOpen = false"{{ if eq .ActiveNav "invoices" }} aria-current="page" class="nav-link active"{{ else }} class="nav-link"{{ end }}><span class="nav-icon">I</span>Invoices</a>
     <p class="nav-section-label">Actions</p>
     <a href="/accounts/new" @click="navOpen = false" class="nav-action">+ New account</a>
@@ -20,6 +21,7 @@
     <a href="/products/new" @click="navOpen = false" class="nav-action">+ New product</a>
      <a href="/suppliers/new" @click="navOpen = false" class="nav-action">+ New supplier</a>
      <a href="/sales-orders/new" @click="navOpen = false" class="nav-action">+ New sales order</a>
+     <a href="/supplier-payments/new" @click="navOpen = false" class="nav-action">+ New supplier payment</a>
   </nav>
 </aside>
 <header class="mobile-header"><a class="brand" href="/dashboard">Syncline</a><button class="menu-toggle" type="button" @click="navOpen = !navOpen" :aria-expanded="navOpen.toString()" aria-controls="primary-navigation"><span class="sr-only">Toggle navigation</span>Menu</button></header>

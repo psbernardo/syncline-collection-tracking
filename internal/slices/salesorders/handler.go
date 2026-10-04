@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -27,7 +28,19 @@ type CustomerOption struct {
 type ProductOption struct {
 	ID             int64
 	SKU, Name, UOM string
+	Description    string
 }
+
+type salesOrderProductSelectView struct {
+	Index    string
+	Selected string
+	Products []ProductOption
+}
+
+func salesOrderProductSelect(index string, selected int64, products []ProductOption) salesOrderProductSelectView {
+	return salesOrderProductSelectView{Index: index, Selected: strconv.FormatInt(selected, 10), Products: products}
+}
+
 type CustomerOptions func(context.Context) ([]CustomerOption, error)
 type ProductOptions func(context.Context) ([]ProductOption, error)
 
@@ -106,7 +119,7 @@ func (h *Handler) templates(name string) (*template.Template, error) {
 	if value := h.renderers[name]; value != nil {
 		return value, nil
 	}
-	t := template.New(name)
+	t := template.New(name).Funcs(template.FuncMap{"salesOrderProductSelect": salesOrderProductSelect})
 	var err error
 	t, err = t.ParseFS(files, "templates/"+name+".html")
 	if err != nil {
@@ -589,13 +602,13 @@ func selectionsFromForm(r *http.Request) ([]LineSelection, error) {
 		return nil, err
 	}
 	var selections []LineSelection
-	for key, values := range r.PostForm {
-		if !strings.HasPrefix(key, "lines[") || !strings.HasSuffix(key, "].quantity") || len(values) == 0 || strings.TrimSpace(values[0]) == "" {
+	for _, index := range orderedFormLineIndices(r, "].quantity") {
+		prefix := "lines[" + strconv.Itoa(index) + "]"
+		values := r.PostForm[prefix+".quantity"]
+		if len(values) == 0 || strings.TrimSpace(values[0]) == "" {
 			continue
 		}
-		start := strings.Index(key, "[") + 1
-		end := strings.Index(key, "]")
-		id, err := strconv.ParseInt(r.FormValue("lines["+key[start:end]+"].id"), 10, 64)
+		id, err := strconv.ParseInt(r.FormValue(prefix+".id"), 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("a quotation line is invalid")
 		}
@@ -611,6 +624,25 @@ func selectionsFromForm(r *http.Request) ([]LineSelection, error) {
 	return selections, nil
 }
 
+func orderedFormLineIndices(r *http.Request, suffix string) []int {
+	indices := make([]int, 0)
+	for key := range r.PostForm {
+		if !strings.HasPrefix(key, "lines[") || !strings.HasSuffix(key, suffix) {
+			continue
+		}
+		end := strings.Index(key, "]")
+		if end < len("lines[") {
+			continue
+		}
+		index, err := strconv.Atoi(key[len("lines["):end])
+		if err == nil && index >= 0 {
+			indices = append(indices, index)
+		}
+	}
+	sort.Ints(indices)
+	return indices
+}
+
 func standaloneFromForm(r *http.Request) (StandaloneOrderInput, error) {
 	if err := r.ParseForm(); err != nil {
 		return StandaloneOrderInput{}, err
@@ -620,25 +652,29 @@ func standaloneFromForm(r *http.Request) (StandaloneOrderInput, error) {
 		return StandaloneOrderInput{}, errors.New("select a customer")
 	}
 	var lines []StandaloneLineInput
-	for key, values := range r.PostForm {
-		if !strings.HasPrefix(key, "lines[") || !strings.HasSuffix(key, "].product_id") || len(values) == 0 {
+	for _, lineIndex := range orderedFormLineIndices(r, "].product_id") {
+		prefix := "lines[" + strconv.Itoa(lineIndex) + "]"
+		values := r.PostForm[prefix+".product_id"]
+		if len(values) == 0 {
 			continue
 		}
-		index := key[len("lines["):strings.Index(key, "]")]
 		product, parseErr := strconv.ParseInt(values[0], 10, 64)
 		if parseErr != nil || product < 1 {
 			return StandaloneOrderInput{}, errors.New("select a valid product")
 		}
-		quantity, parseErr := money.Parse(r.FormValue("lines[" + index + "].quantity"))
+		quantity, parseErr := money.Parse(r.FormValue(prefix + ".quantity"))
 		if parseErr != nil || quantity <= 0 {
 			return StandaloneOrderInput{}, errors.New("quantities must be positive numbers")
 		}
-		price, parseErr := money.Parse(r.FormValue("lines[" + index + "].unit_price"))
+		price, parseErr := money.Parse(r.FormValue(prefix + ".unit_price"))
 		if parseErr != nil {
 			return StandaloneOrderInput{}, errors.New("unit prices must be valid numbers")
 		}
-		rate, _ := money.Parse(r.FormValue("lines[" + index + "].tax_rate"))
-		lines = append(lines, StandaloneLineInput{ProductID: product, Quantity: quantity, UOM: r.FormValue("lines[" + index + "].uom"), UnitPrice: price, TaxCode: r.FormValue("lines[" + index + "].tax_code"), TaxRate: rate.Int64()})
+		rate, parseErr := strconv.ParseInt(r.FormValue(prefix+".tax_rate"), 10, 64)
+		if parseErr != nil || rate < 0 {
+			return StandaloneOrderInput{}, errors.New("tax rates must be valid")
+		}
+		lines = append(lines, StandaloneLineInput{ProductID: product, Quantity: quantity, UOM: r.FormValue(prefix + ".uom"), UnitPrice: price, TaxCode: r.FormValue(prefix + ".tax_code"), TaxRate: rate})
 	}
 	if len(lines) == 0 {
 		return StandaloneOrderInput{}, errors.New("add at least one product")

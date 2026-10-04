@@ -33,6 +33,7 @@ type SupplierProductReader interface {
 type ProductOption struct {
 	ID             int64
 	SKU, Name, UOM string
+	Description    string
 	SupplierSKU    string
 	ReferenceCost  money.Amount
 	SourceLineID   int64
@@ -77,6 +78,7 @@ type formLine struct {
 	ID                 int64
 	ProductID          int64
 	SKU, Name, UOM     string
+	Description        string
 	Quantity, UnitCost money.Amount
 	SupplierSKU        string
 }
@@ -214,14 +216,21 @@ func (h *Handler) editPage(w http.ResponseWriter, r *http.Request) {
 	}
 	mode := purchaseMode(order)
 	products := []ProductOption(nil)
-	if mode == DirectMode && h.productOptions != nil {
-		products, err = h.productOptions(r.Context())
+	descriptions := map[int64]string{}
+	if h.productOptions != nil {
+		options, optionsErr := h.productOptions(r.Context())
+		err = optionsErr
 		if err != nil {
 			http.Error(w, "Internal server error", 500)
 			return
 		}
+		descriptions = productDescriptions(options)
+		if mode == DirectMode {
+			products = options
+		}
 	}
-	h.render(w, page{Title: "Edit purchase order", ActiveNav: "purchase-orders", Order: order, Suppliers: suppliers, SupplierID: order.SupplierID, PaymentTerms: order.PaymentTerms, Notes: order.Notes, ExpectedDelivery: formatOptionalDate(order.ExpectedDelivery), Mode: mode, Products: products, Lines: purchaseFormLines(order), Edit: true, SourceOrderNumber: order.SalesOrderNumber})
+	applyLineDescriptions(order.Lines, descriptions)
+	h.render(w, page{Title: "Edit purchase order", ActiveNav: "purchase-orders", Order: order, Suppliers: suppliers, SupplierID: order.SupplierID, PaymentTerms: order.PaymentTerms, Notes: order.Notes, ExpectedDelivery: formatOptionalDate(order.ExpectedDelivery), Mode: mode, Products: products, Lines: purchaseFormLines(order, descriptions), Edit: true, SourceOrderNumber: order.SalesOrderNumber})
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -285,16 +294,36 @@ func (h *Handler) renderEditError(w http.ResponseWriter, r *http.Request, order 
 	message, missing := validationMessage(err, supplierName(suppliers, supplierID))
 	products := []ProductOption(nil)
 	mode := purchaseMode(order)
-	if mode == DirectMode && h.productOptions != nil {
-		products, _ = h.productOptions(r.Context())
+	descriptions := map[int64]string{}
+	if h.productOptions != nil {
+		options, _ := h.productOptions(r.Context())
+		descriptions = productDescriptions(options)
+		if mode == DirectMode {
+			products = options
+		}
 	}
-	_ = h.templates["form"].ExecuteTemplate(w, "layout", page{Title: "Edit purchase order", ActiveNav: "purchase-orders", Error: message, Order: order, Suppliers: suppliers, SupplierID: supplierID, MissingProducts: missing, PaymentTerms: r.FormValue("payment_terms"), Notes: r.FormValue("notes"), ExpectedDelivery: r.FormValue("expected_delivery_date"), Mode: mode, Products: products, Lines: purchaseFormLines(order), Edit: true, SourceOrderNumber: order.SalesOrderNumber, ExcludedLineIDs: excludedLineIDs(r)})
+	applyLineDescriptions(order.Lines, descriptions)
+	_ = h.templates["form"].ExecuteTemplate(w, "layout", page{Title: "Edit purchase order", ActiveNav: "purchase-orders", Error: message, Order: order, Suppliers: suppliers, SupplierID: supplierID, MissingProducts: missing, PaymentTerms: r.FormValue("payment_terms"), Notes: r.FormValue("notes"), ExpectedDelivery: r.FormValue("expected_delivery_date"), Mode: mode, Products: products, Lines: purchaseFormLines(order, descriptions), Edit: true, SourceOrderNumber: order.SalesOrderNumber, ExcludedLineIDs: excludedLineIDs(r)})
 }
 
-func purchaseFormLines(order PurchaseOrder) []formLine {
+func productDescriptions(options []ProductOption) map[int64]string {
+	descriptions := make(map[int64]string, len(options))
+	for _, option := range options {
+		descriptions[option.ID] = option.Description
+	}
+	return descriptions
+}
+
+func applyLineDescriptions(lines []Line, descriptions map[int64]string) {
+	for index := range lines {
+		lines[index].Description = descriptions[lines[index].ProductID]
+	}
+}
+
+func purchaseFormLines(order PurchaseOrder, descriptions map[int64]string) []formLine {
 	lines := make([]formLine, 0, len(order.Lines))
 	for _, line := range order.Lines {
-		lines = append(lines, formLine{ID: line.SalesOrderLineID, ProductID: line.ProductID, SKU: line.SKU, Name: line.Name, UOM: line.UOM, Quantity: line.Quantity, UnitCost: line.UnitCost, SupplierSKU: line.SupplierSKU})
+		lines = append(lines, formLine{ID: line.SalesOrderLineID, ProductID: line.ProductID, SKU: line.SKU, Name: line.Name, UOM: line.UOM, Description: descriptions[line.ProductID], Quantity: line.Quantity, UnitCost: line.UnitCost, SupplierSKU: line.SupplierSKU})
 	}
 	return lines
 }
@@ -526,13 +555,22 @@ func (h *Handler) renderPage(w http.ResponseWriter, r *http.Request, errorText, 
 	excluded := excludedLineSet(r)
 	lines := make([]formLine, 0)
 	productOptions := make([]ProductOption, 0, len(order.Quotation.Lines))
+	productDescriptionsByID := map[int64]string{}
+	if selectedSupplier > 0 && h.productOptions != nil {
+		allProducts, optionsErr := h.productOptions(r.Context())
+		if optionsErr != nil {
+			http.Error(w, "Internal server error", 500)
+			return
+		}
+		productDescriptionsByID = productDescriptions(allProducts)
+	}
 	for _, line := range order.Quotation.Lines {
 		if excluded[line.ID] {
 			continue
 		}
 		mapping := mappings[line.ProductID]
 		if selectedSupplier > 0 && mapping.ProductID == line.ProductID {
-			productOptions = append(productOptions, ProductOption{ID: line.ID, SourceLineID: line.ID, SKU: line.ProductSKU, Name: line.ProductName, UOM: line.UOM, Quantity: line.Quantity, ReferenceCost: mapping.ReferenceCost, SupplierSKU: mapping.SupplierSKU})
+			productOptions = append(productOptions, ProductOption{ID: line.ID, SourceLineID: line.ID, SKU: line.ProductSKU, Name: line.ProductName, UOM: line.UOM, Description: productDescriptionsByID[line.ProductID], Quantity: line.Quantity, ReferenceCost: mapping.ReferenceCost, SupplierSKU: mapping.SupplierSKU})
 		}
 	}
 	if len(missingProducts) > 0 {

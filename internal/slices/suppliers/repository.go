@@ -110,7 +110,7 @@ func (r *GormRepository) ListProducts(ctx context.Context, active bool) ([]Suppl
 }
 func (r *GormRepository) product(ctx context.Context, db *gorm.DB, id int64) (SupplierProduct, error) {
 	var m supplierProductModel
-	q := db.WithContext(ctx).Table("dbo.supplier_products AS sp").Select("sp.supplier_product_id, sp.supplier_id, sp.product_id, s.name supplier_name, p.sku product_sku, p.name product_name, sp.supplier_sku, sp.reference_cost_scaled, sp.is_active, sp.updated_at_utc, sp.row_version").Joins("JOIN dbo.suppliers s ON s.supplier_id = sp.supplier_id").Joins("JOIN dbo.products p ON p.product_id = sp.product_id").Where("sp.supplier_product_id = ?", id)
+	q := db.WithContext(ctx).Table("dbo.supplier_products AS sp").Select("sp.supplier_product_id, sp.supplier_id, sp.product_id, s.name supplier_name, p.sku product_sku, p.name product_name, p.description product_description, sp.supplier_sku, sp.reference_cost_scaled, sp.is_active, sp.updated_at_utc, sp.row_version").Joins("JOIN dbo.suppliers s ON s.supplier_id = sp.supplier_id").Joins("JOIN dbo.products p ON p.product_id = sp.product_id").Where("sp.supplier_product_id = ?", id)
 	if e := q.First(&m).Error; e != nil {
 		if errors.Is(e, gorm.ErrRecordNotFound) {
 			return SupplierProduct{}, ErrSupplierProductNotFound
@@ -136,7 +136,7 @@ func (r *GormRepository) FindProduct(ctx context.Context, db *gorm.DB, id int64)
 
 func (r *GormRepository) ListCatalog(ctx context.Context, supplierID int64) ([]SupplierCatalogProduct, error) {
 	var rows []SupplierCatalogProduct
-	err := r.db.WithContext(ctx).Table("dbo.products AS p").Select("p.product_id, sp.supplier_product_id, p.sku, p.name, p.uom, COALESCE(sp.reference_cost_scaled, 0) AS reference_cost, CASE WHEN sp.supplier_product_id IS NULL THEN 0 ELSE 1 END AS configured, p.is_active").Joins("LEFT JOIN dbo.supplier_products sp ON sp.product_id = p.product_id AND sp.supplier_id = ?", supplierID).Where("p.is_active = 1").Order("p.sku, p.product_id").Scan(&rows).Error
+	err := r.db.WithContext(ctx).Table("dbo.products AS p").Select("p.product_id, sp.supplier_product_id, p.sku, p.name, p.description, p.uom, COALESCE(sp.reference_cost_scaled, 0) AS reference_cost, CASE WHEN sp.supplier_product_id IS NULL THEN 0 ELSE 1 END AS configured, p.is_active").Joins("LEFT JOIN dbo.supplier_products sp ON sp.product_id = p.product_id AND sp.supplier_id = ?", supplierID).Where("p.is_active = 1").Order("p.sku, p.product_id").Scan(&rows).Error
 	return rows, err
 }
 

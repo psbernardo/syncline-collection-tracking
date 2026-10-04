@@ -368,9 +368,9 @@ func productSelect(items []ProductOption, selected int64) webtemplates.Searchabl
 	options := make([]webtemplates.SearchableSelectOption, 0, len(items))
 	for _, item := range items {
 		label := item.SKU + " - " + item.Name + " (" + item.UOM + ")"
-		options = append(options, webtemplates.SearchableSelectOption{Value: strconv.FormatInt(item.ID, 10), Label: label, Search: strings.ToLower(label)})
+		options = append(options, webtemplates.SearchableSelectOption{Value: strconv.FormatInt(item.ID, 10), Label: label, Description: item.Description, Search: strings.ToLower(label + " " + item.Description)})
 	}
-	return webtemplates.SearchableSelectViewModel{ID: "product-select", Name: "product_id", Label: "Product", Placeholder: "Search by SKU or product name...", Options: options, Selected: strconv.FormatInt(selected, 10)}
+	return webtemplates.SearchableSelectViewModel{ID: "product-select", Name: "product_id", Label: "Product", Placeholder: "Search by SKU or product name...", Options: options, Selected: strconv.FormatInt(selected, 10), ShowSelectedDetails: true}
 }
 func parseID(value, field string) (int64, ValidationErrors) {
 	id, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)

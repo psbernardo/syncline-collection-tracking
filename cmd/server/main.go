@@ -17,6 +17,7 @@ import (
 	"github.com/psbernardo/syncline-collection-tracking/internal/slices/quotations"
 	"github.com/psbernardo/syncline-collection-tracking/internal/slices/receivables"
 	"github.com/psbernardo/syncline-collection-tracking/internal/slices/salesorders"
+	"github.com/psbernardo/syncline-collection-tracking/internal/slices/supplierpayments"
 	"github.com/psbernardo/syncline-collection-tracking/internal/slices/suppliers"
 	webstatic "github.com/psbernardo/syncline-collection-tracking/internal/web/static"
 	webtemplates "github.com/psbernardo/syncline-collection-tracking/internal/web/templates"
@@ -63,7 +64,7 @@ func run() error {
 		}
 		options := make([]suppliers.ProductOption, 0, len(items))
 		for _, item := range items {
-			options = append(options, suppliers.ProductOption{ID: item.ID, SKU: item.SKU, Name: item.Name, UOM: item.UOM})
+			options = append(options, suppliers.ProductOption{ID: item.ID, SKU: item.SKU, Name: item.Name, UOM: item.UOM, Description: item.Description})
 		}
 		return options, nil
 	}
@@ -108,7 +109,7 @@ func run() error {
 		}
 		options := make([]salesorders.ProductOption, 0, len(items))
 		for _, item := range items {
-			options = append(options, salesorders.ProductOption{ID: item.ID, SKU: item.SKU, Name: item.Name, UOM: item.UOM})
+			options = append(options, salesorders.ProductOption{ID: item.ID, SKU: item.SKU, Name: item.Name, UOM: item.UOM, Description: item.Description})
 		}
 		return options, nil
 	})
@@ -117,6 +118,11 @@ func run() error {
 		return err
 	}
 	supplierHandler.RegisterRoutes(mux)
+	supplierPaymentsHandler, err := supplierpayments.NewHandler(supplierpayments.NewService(db, supplierpayments.NewGormRepository(db), supplierRepository))
+	if err != nil {
+		return err
+	}
+	supplierPaymentsHandler.RegisterRoutes(mux)
 	receivableHandler, err := receivables.NewHandler(receivables.NewService(db, receivables.NewGormRepository(db), accountRepository, receivables.NewGormInvoiceRepository(db)))
 	if err != nil {
 		return err
@@ -150,7 +156,7 @@ func run() error {
 		}
 		options := make([]purchaseorders.ProductOption, 0, len(items))
 		for _, item := range items {
-			options = append(options, purchaseorders.ProductOption{ID: item.ID, SKU: item.SKU, Name: item.Name, UOM: item.UOM})
+			options = append(options, purchaseorders.ProductOption{ID: item.ID, SKU: item.SKU, Name: item.Name, UOM: item.UOM, Description: item.Description})
 		}
 		return options, nil
 	})

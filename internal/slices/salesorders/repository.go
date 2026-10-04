@@ -473,12 +473,17 @@ func (r *GormRepository) UpdateFromQuotation(ctx context.Context, id int64, q qu
 			return err
 		}
 		requested := make(map[int64]money.Amount, len(selections))
+		orderedIDs := make([]int64, 0, len(selections))
 		for _, selection := range selections {
+			if _, exists := requested[selection.QuotationLineID]; !exists {
+				orderedIDs = append(orderedIDs, selection.QuotationLineID)
+			}
 			requested[selection.QuotationLineID] += selection.Quantity
 		}
-		selected := make([]quotations.Line, 0, len(requested))
-		ordered := make([]LineSelection, 0, len(requested))
-		for lineID, quantity := range requested {
+		selected := make([]quotations.Line, 0, len(orderedIDs))
+		ordered := make([]LineSelection, 0, len(orderedIDs))
+		for _, lineID := range orderedIDs {
+			quantity := requested[lineID]
 			line, ok := byID[lineID]
 			available := line.Quantity - all[lineID] + current[lineID]
 			if !ok || quantity <= 0 || quantity > available {
@@ -709,7 +714,7 @@ func (r *GormRepository) FindByID(ctx context.Context, id int64) (SalesOrder, er
 	q.TermsDays, q.CreatedAtUTC = m.TermsDays, m.CreatedAt
 	q.Totals = quotations.Totals{Subtotal: money.Amount(m.Subtotal), Tax: money.Amount(m.Tax), Total: money.Amount(m.Total)}
 	var lines []lineModel
-	if err := r.db.WithContext(ctx).Table("dbo.sales_order_lines AS sol").Select("sol.*").Where("sol.sales_order_id = ?", id).Find(&lines).Error; err != nil {
+	if err := r.db.WithContext(ctx).Table("dbo.sales_order_lines AS sol").Select("sol.*").Where("sol.sales_order_id = ?", id).Order("sol.sales_order_line_id").Find(&lines).Error; err != nil {
 		return SalesOrder{}, err
 	}
 	for _, line := range lines {

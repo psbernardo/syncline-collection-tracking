@@ -101,12 +101,14 @@ func TestSalesOrderPDFUsesSalesOrderTitle(t *testing.T) {
 }
 
 func TestStandaloneSalesOrderPageUsesSharedLayout(t *testing.T) {
-	h := NewHandler(&orderRepo{}, quotationRepo{value: testQuotation()})
+	h := NewHandler(&orderRepo{}, quotationRepo{value: testQuotation()}, ProductOptions(func(context.Context) ([]ProductOption, error) {
+		return []ProductOption{{ID: 9, SKU: "SKU-9", Name: "Long product", UOM: "BOX", Description: "Product details that should wrap instead of being hidden"}}, nil
+	}))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("GET", "/sales-orders/new", nil))
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "New repeat order") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "New repeat order") || !strings.Contains(w.Body.String(), `data-show-selected-details="true"`) || !strings.Contains(w.Body.String(), `data-description="Product details that should wrap instead of being hidden"`) || !strings.Contains(w.Body.String(), `data-uom="BOX"`) {
 		t.Fatalf("unexpected repeat-order page: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
@@ -125,11 +127,11 @@ func TestQuotationSalesOrderPageShowsRemainingLines(t *testing.T) {
 }
 
 func TestStandaloneFormParsesCustomerAndLines(t *testing.T) {
-	form := url.Values{"company_account_id": {"42"}, "customer_po_number": {"PO-123"}, "terms_days": {"30"}, "lines[0].product_id": {"9"}, "lines[0].quantity": {"2"}, "lines[0].uom": {"BOX"}, "lines[0].unit_price": {"125"}, "lines[0].tax_code": {"NONE"}, "lines[0].tax_rate": {"0"}}
+	form := url.Values{"company_account_id": {"42"}, "customer_po_number": {"PO-123"}, "terms_days": {"30"}, "lines[0].product_id": {"9"}, "lines[0].quantity": {"2"}, "lines[0].uom": {"BOX"}, "lines[0].unit_price": {"125"}, "lines[0].tax_code": {"NONE"}, "lines[0].tax_rate": {"0"}, "lines[1].product_id": {"4"}, "lines[1].quantity": {"3"}, "lines[1].uom": {"EA"}, "lines[1].unit_price": {"50"}, "lines[1].tax_code": {"NONE"}, "lines[1].tax_rate": {"0"}}
 	r := httptest.NewRequest("POST", "/sales-orders", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	input, err := standaloneFromForm(r)
-	if err != nil || input.CompanyAccountID != 42 || len(input.Lines) != 1 || input.Lines[0].ProductID != 9 {
+	if err != nil || input.CompanyAccountID != 42 || len(input.Lines) != 2 || input.Lines[0].ProductID != 9 || input.Lines[1].ProductID != 4 {
 		t.Fatalf("unexpected standalone input: %+v, error=%v", input, err)
 	}
 }
@@ -187,11 +189,11 @@ func TestQuotationEditRequiresAcknowledgement(t *testing.T) {
 }
 
 func TestQuotationSelectionsParseOnlyPositiveQuantities(t *testing.T) {
-	form := url.Values{"lines[0].id": {"11"}, "lines[0].quantity": {"4"}, "lines[1].id": {"12"}, "lines[1].quantity": {"0"}}
+	form := url.Values{"lines[0].id": {"11"}, "lines[0].quantity": {"4"}, "lines[1].id": {"12"}, "lines[1].quantity": {"2"}, "lines[2].id": {"13"}, "lines[2].quantity": {"0"}}
 	r := httptest.NewRequest("POST", "/quotations/7/sales-order", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	selections, err := selectionsFromForm(r)
-	if err != nil || len(selections) != 1 || selections[0].QuotationLineID != 11 {
+	if err != nil || len(selections) != 2 || selections[0].QuotationLineID != 11 || selections[1].QuotationLineID != 12 {
 		t.Fatalf("unexpected selections: %+v, error=%v", selections, err)
 	}
 }

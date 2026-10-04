@@ -43,6 +43,8 @@ var registry = []Migration{
 	{Version: 26, Name: "make receivable invoice optional", Up: up0026, Down: down0026},
 	{Version: 27, Name: "add CASE UOM", Up: up0027, Down: down0027},
 	{Version: 28, Name: "normalize sales order invoice lifecycle", Up: up0028, Down: down0028},
+	{Version: 29, Name: "create supplier payment checks", Up: up0029, Down: down0029},
+	{Version: 30, Name: "make supplier check numbers globally unique", Up: up0030, Down: down0030},
 }
 
 func Status(ctx context.Context, db *gorm.DB) error {
