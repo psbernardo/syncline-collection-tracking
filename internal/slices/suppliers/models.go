@@ -23,6 +23,7 @@ type supplierProductModel struct {
 	SupplierID                                         int64 `gorm:"column:supplier_id"`
 	ProductID                                          int64 `gorm:"column:product_id"`
 	SupplierName, ProductSKU, ProductName, SupplierSKU string
+	ProductDescription                                 string    `gorm:"column:product_description"`
 	ReferenceCost                                      int64     `gorm:"column:reference_cost_scaled"`
 	IsActive                                           bool      `gorm:"column:is_active"`
 	UpdatedAtUTC                                       time.Time `gorm:"column:updated_at_utc"`
@@ -31,5 +32,5 @@ type supplierProductModel struct {
 
 func (supplierProductModel) TableName() string { return "dbo.supplier_products" }
 func (m supplierProductModel) toDomain() SupplierProduct {
-	return SupplierProduct{m.ID, m.SupplierID, m.ProductID, m.SupplierName, m.ProductSKU, m.ProductName, m.SupplierSKU, money.Amount(m.ReferenceCost), m.IsActive, m.UpdatedAtUTC, m.RowVersion}
+	return SupplierProduct{ID: m.ID, SupplierID: m.SupplierID, ProductID: m.ProductID, SupplierName: m.SupplierName, ProductSKU: m.ProductSKU, ProductName: m.ProductName, SupplierSKU: m.SupplierSKU, ProductDescription: m.ProductDescription, ReferenceCost: money.Amount(m.ReferenceCost), IsActive: m.IsActive, UpdatedAtUTC: m.UpdatedAtUTC, RowVersion: m.RowVersion}
 }

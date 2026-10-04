@@ -1,0 +1,16 @@
+{{ define "content" }}
+<div class="page-heading"><div><p class="eyebrow">Procurement</p><h1>Supplier payments</h1><p class="muted">Track issued checks and upcoming supplier payments.</p></div><a class="button button-primary" href="/supplier-payments/new">Add supplier payment</a></div>
+
+<section class="summary-grid supplier-payment-summary" aria-label="Upcoming supplier payments">
+  <article class="summary-card status-near-due"><p class="summary-label">Near due · next 14 days</p><p class="summary-amount">{{ .Result.Summary.NearDue.FormatPHP }}</p><p class="summary-meta">Due today through day 14</p></article>
+  <article class="summary-card status-near-due"><p class="summary-label">Due within 5 days</p><p class="summary-amount">{{ .Result.Summary.WithinFiveDays.FormatPHP }}</p><p class="summary-meta">Due today through day 5</p></article>
+  <article class="summary-card"><p class="summary-label">Due in 6–14 days</p><p class="summary-amount">{{ .Result.Summary.DaysSixToFourteen.FormatPHP }}</p><p class="summary-meta">Later part of the 14-day window</p></article>
+</section>
+
+<section class="card"><div class="card-heading"><h2>Checks and payments</h2><div class="card-heading-actions"><span class="muted">{{ len .Result.Items }} record(s)</span>{{ if .IncludeVoided }}<a class="button" href="/supplier-payments">Hide voided</a>{{ else }}<a class="button" href="/supplier-payments?show_voided=1">Show voided</a>{{ end }}</div></div>
+  <div class="table-wrap"><table><thead><tr><th>Supplier</th><th>Check number</th><th>Issue date</th><th>Due date</th><th>Amount</th><th>Due status</th><th>Actions</th></tr></thead><tbody>
+  {{ range .Result.Items }}<tr><td>{{ .SupplierName }}</td><td><strong>{{ .CheckNumber }}</strong></td><td>{{ .IssueDate }}</td><td>{{ .DueDate }}</td><td>{{ .Amount }}</td><td><span class="badge">{{ .DueLabel }}</span></td><td>{{ if eq .Status "Active" }}<a class="button" href="/supplier-payments/{{ .ID }}/edit">Edit</a> <form class="inline-form" method="post" action="/supplier-payments/{{ .ID }}/delete" onsubmit="return confirm('Void check {{ .CheckNumber }}? It will no longer count toward upcoming totals.')"><input type="hidden" name="row_version" value="{{ .RowVersion }}"><button class="button button-danger" type="submit">Delete</button></form>{{ else }}<span class="muted">Voided</span>{{ end }}</td></tr>
+  {{ else }}<tr><td colspan="7" class="muted">No supplier payments found.</td></tr>{{ end }}
+  </tbody></table></div>
+</section>
+{{ end }}

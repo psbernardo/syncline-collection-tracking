@@ -39,6 +39,7 @@ type ConfigureProductsResult struct {
 type ProductOption struct {
 	ID             int64
 	SKU, Name, UOM string
+	Description    string
 }
 type ProductOptionLoader func(context.Context) ([]ProductOption, error)
 type Service struct {

@@ -50,6 +50,7 @@ func (e MissingSupplierProductsError) Is(target error) bool {
 type Line struct {
 	ID, SalesOrderID, SalesOrderLineID, ProductID, SupplierProductID int64
 	SKU, Name, SupplierSKU, UOM                                      string
+	Description                                                      string
 	Quantity, UnitCost, Total                                        money.Amount
 }
 

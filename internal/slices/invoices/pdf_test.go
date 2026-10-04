@@ -8,6 +8,15 @@ import (
 	"github.com/psbernardo/syncline-collection-tracking/internal/shared/money"
 )
 
+func TestInvoiceTaxPercentUsesTaxRule(t *testing.T) {
+	if got := invoiceTaxPercent("VAT12", 1200000000); got != "12%" {
+		t.Fatalf("VAT12 tax = %q, want 12%%", got)
+	}
+	if got := invoiceTaxPercent("NONE", 120000); got != "0%" {
+		t.Fatalf("NONE tax = %q, want 0%%", got)
+	}
+}
+
 func TestInvoicePDFRendererUsesInvoiceDocumentContract(t *testing.T) {
 	document := InvoicePDFDocument{
 		Number: "INV-00000003", SalesOrderNumber: "SO-00000003", CustomerPO: "PO-3",

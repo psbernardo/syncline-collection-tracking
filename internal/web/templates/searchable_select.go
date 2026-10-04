@@ -14,12 +14,13 @@ type SearchableSelectOption struct {
 
 // SearchableSelectViewModel contains the server-owned state for a single select.
 type SearchableSelectViewModel struct {
-	ID          string
-	Name        string
-	Label       string
-	Placeholder string
-	Options     []SearchableSelectOption
-	Selected    string
+	ID                  string
+	Name                string
+	Label               string
+	Placeholder         string
+	Options             []SearchableSelectOption
+	Selected            string
+	ShowSelectedDetails bool
 }
 
 // TextDateInputViewModel contains the display and canonical values for a date field.

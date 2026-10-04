@@ -279,7 +279,7 @@ func (p pdfPage) drawLine(y, height float64, number int, line Line, description 
 		{strings.Join(description, "\n"), 205, gopdf.Center},
 		{formatUnitPrice(line.UnitPrice), 85, gopdf.Right},
 		{taxPercent(line.TaxRate), 50, gopdf.Right},
-		{formatUnitPrice(line.VATInclusiveTotal), 87, gopdf.Right},
+		{quotationPDFLineAmount(line), 87, gopdf.Right},
 	}
 	x := pdfMargin
 	for index, value := range values {
@@ -297,6 +297,10 @@ func (p pdfPage) drawLine(y, height float64, number int, line Line, description 
 		x += value.width
 	}
 	p.subtleLine(pdfMargin, y+height, pdfWidth-pdfMargin, y+height)
+}
+
+func quotationPDFLineAmount(line Line) string {
+	return formatUnitPrice(line.LineTotal)
 }
 
 func taxPercent(rate int64) string {

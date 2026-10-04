@@ -8,6 +8,7 @@ import (
 
 	"github.com/psbernardo/syncline-collection-tracking/internal/shared/money"
 	sharedpdf "github.com/psbernardo/syncline-collection-tracking/internal/shared/pdf"
+	"github.com/psbernardo/syncline-collection-tracking/internal/slices/quotations"
 	"github.com/signintech/gopdf"
 )
 
@@ -24,6 +25,7 @@ type InvoicePDFDocument struct {
 
 type InvoicePDFLine struct {
 	SKU, Name, UOM              string
+	TaxCode                     string
 	Quantity, UnitPrice, Amount money.Amount
 	TaxRate                     int64
 }
@@ -177,7 +179,7 @@ func (p invoicePage) line(y, height float64, number int, line InvoicePDFLine, de
 		text  string
 		width float64
 		align int
-	}{{fmt.Sprintf("%d.", number), 25, gopdf.Center}, {line.Quantity.Format(), 50, gopdf.Center}, {line.UOM, 45, gopdf.Center}, {strings.Join(description, "\n"), 205, gopdf.Left}, {sharedpdf.FormatUnitPrice(line.UnitPrice), 85, gopdf.Right}, {fmt.Sprintf("%d%%", line.TaxRate/10000), 50, gopdf.Right}, {sharedpdf.FormatUnitPrice(line.Amount), 87, gopdf.Right}}
+	}{{fmt.Sprintf("%d.", number), 25, gopdf.Center}, {line.Quantity.Format(), 50, gopdf.Center}, {line.UOM, 45, gopdf.Center}, {strings.Join(description, "\n"), 205, gopdf.Left}, {sharedpdf.FormatUnitPrice(line.UnitPrice), 85, gopdf.Right}, {invoiceTaxPercent(line.TaxCode, line.TaxRate), 50, gopdf.Right}, {sharedpdf.FormatUnitPrice(line.Amount), 87, gopdf.Right}}
 	x := sharedpdf.Margin
 	for index, value := range values {
 		if index == 3 {
@@ -188,6 +190,17 @@ func (p invoicePage) line(y, height float64, number int, line InvoicePDFLine, de
 		x += value.width
 	}
 	sharedpdf.Line(p.pdf, sharedpdf.Margin, y+height, sharedpdf.Width-sharedpdf.Margin, y+height, "gray")
+}
+
+func invoiceTaxPercent(code string, rate int64) string {
+	switch code {
+	case quotations.TaxVAT12:
+		return "12%"
+	case quotations.TaxNone:
+		return "0%"
+	default:
+		return fmt.Sprintf("%d%%", rate/10000)
+	}
 }
 
 func (p invoicePage) totals(y float64) {
@@ -214,7 +227,7 @@ func (p invoicePage) totals(y float64) {
 	}{
 		{"Total Sales:", amountPointer(p.document.Total)},
 		{"Less: VAT:", nonZeroAmountPointer(p.document.Tax)},
-		{"Less: Discount:", p.document.Discount},
+		{"Amount: Net of Vat:", vatableSales},
 		{"Add Vat:", nonZeroAmountPointer(p.document.Tax)},
 		{"Less: Withholding Tax:", p.document.WithholdingTax},
 		{"Total amount due:", totalAmountDue},

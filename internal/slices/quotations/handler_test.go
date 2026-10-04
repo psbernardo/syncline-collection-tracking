@@ -169,7 +169,7 @@ func TestQuotationFormUsesSearchableRelationshipSelectors(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.newPage(w, httptest.NewRequest("GET", "/quotations/new", nil))
 	body := w.Body.String()
-	for _, expected := range []string{"QT-00000001", "Search customer...", "ACME - Widget (PC)", "Long widget description", "Quoted items", "quotation-row-template", "class=\"product-cell\" colspan=\"2\"", "quotation-line-profitability", "Cost &amp; profit", "data-field=\"supplier-cost\"", "quotation-grid-value", `value="VAT12" selected`, "VAT-inclusive, 12% VAT"} {
+	for _, expected := range []string{"QT-00000001", "Search customer...", "ACME - Widget (PC)", "Long widget description", `data-show-selected-details="true"`, "searchable-select-selected-label", "Quoted items", "quotation-row-template", "class=\"product-cell\" colspan=\"2\"", "quotation-line-profitability", "Cost &amp; profit", "data-field=\"supplier-cost\"", "quotation-grid-value", `value="VAT12" selected`, "VAT-inclusive, 12% VAT"} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("quotation form does not contain %q", expected)
 		}
@@ -238,6 +238,14 @@ func TestQuotationPDFDownloadReturnsPDFAttachment(t *testing.T) {
 	}
 	if got := w.Header().Get("Content-Length"); got != strconv.Itoa(w.Body.Len()) {
 		t.Fatalf("unexpected content length: header=%q body=%d", got, w.Body.Len())
+	}
+}
+
+func TestQuotationPDFLineAmountExcludesVAT(t *testing.T) {
+	line := Line{LineTotal: 10000, VATInclusiveTotal: 11200, TaxCode: TaxVAT12, TaxRate: 120000}
+
+	if got := quotationPDFLineAmount(line); got != "1.00" {
+		t.Fatalf("quotation PDF line amount = %q, want quantity times unit price (1.00)", got)
 	}
 }
 

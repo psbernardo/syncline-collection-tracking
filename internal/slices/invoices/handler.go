@@ -181,7 +181,7 @@ func (h *Handler) pdf(w http.ResponseWriter, r *http.Request) {
 	}
 	document := InvoicePDFDocument{Seller: sharedpdf.DefaultSeller(), Number: invoice.Number, SalesOrderNumber: invoice.SalesOrderNumber, CustomerPO: invoice.CustomerPONumber, SalesPerson: invoice.SalesPerson, Customer: invoice.CustomerName, BillingAddress: invoice.BillingAddress, DeliveryAddress: invoice.DeliveryAddress, ContactPerson: invoice.ContactPerson, ContactNumber: invoice.ContactNumber, Email: invoice.Email, TermsDays: invoice.TermsDays, InvoiceDate: invoice.InvoiceDateUTC, DueDate: invoice.DueDateUTC, Subtotal: invoice.Subtotal, Tax: invoice.Tax, Total: invoice.Total, VatableSales: nonZeroAmountPointer(invoice.Subtotal), TotalAmountDue: amountPointer(invoice.Total)}
 	for _, line := range invoice.Lines {
-		document.Lines = append(document.Lines, InvoicePDFLine{SKU: line.SKU, Name: line.Name, UOM: line.UOM, Quantity: line.Quantity, UnitPrice: line.UnitPrice, Amount: line.LineTotal, TaxRate: line.TaxRate})
+		document.Lines = append(document.Lines, InvoicePDFLine{SKU: line.SKU, Name: line.Name, UOM: line.UOM, TaxCode: line.TaxCode, Quantity: line.Quantity, UnitPrice: line.UnitPrice, Amount: line.LineTotal, TaxRate: line.TaxRate})
 	}
 	var output bytes.Buffer
 	if err := NewInvoicePDFRenderer().Render(&output, document); err != nil {

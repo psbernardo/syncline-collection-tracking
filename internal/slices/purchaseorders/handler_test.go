@@ -256,7 +256,7 @@ func TestDirectPurchaseOrderUsesCanonicalEditFormAndUpdate(t *testing.T) {
 	h, err := NewHandler(testOrders{}, purchase, func(context.Context) ([]SupplierOption, error) {
 		return []SupplierOption{{ID: 4, Name: "Supplier"}}, nil
 	}, purchase, func(context.Context) ([]ProductOption, error) {
-		return []ProductOption{{ID: 1, SKU: "SKU-1", Name: "Widget", UOM: "PC"}, {ID: 2, SKU: "SKU-2", Name: "Gadget", UOM: "BOX"}}, nil
+		return []ProductOption{{ID: 1, SKU: "SKU-1", Name: "Widget", UOM: "PC", Description: "Widget description wraps over multiple lines"}, {ID: 2, SKU: "SKU-2", Name: "Gadget", UOM: "BOX"}}, nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -266,7 +266,7 @@ func TestDirectPurchaseOrderUsesCanonicalEditFormAndUpdate(t *testing.T) {
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/purchase-orders/8/edit", nil))
 	body := w.Body.String()
-	if w.Code != http.StatusOK || !strings.Contains(body, "Save changes") || !strings.Contains(body, "products[0].quantity") || !strings.Contains(body, "purchase-direct-product-template") || !strings.Contains(body, "quotation-remove-action") || strings.Contains(body, "ellipsis-button") || strings.Contains(body, "Sales order reference") {
+	if w.Code != http.StatusOK || !strings.Contains(body, "Save changes") || !strings.Contains(body, "products[0].quantity") || !strings.Contains(body, "purchase-direct-product-template") || !strings.Contains(body, `data-show-selected-details="true"`) || !strings.Contains(body, `data-description="Widget description wraps over multiple lines"`) || !strings.Contains(body, "quotation-remove-action") || strings.Contains(body, "ellipsis-button") || strings.Contains(body, "Sales order reference") {
 		t.Fatalf("status=%d body=%s", w.Code, body)
 	}
 
